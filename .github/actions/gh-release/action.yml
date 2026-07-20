@@ -1,0 +1,33 @@
+---
+name: Publish signed release
+description: Create a GitHub release with artifact-verification instructions in the notes.
+
+inputs:
+  tag:
+    description: Release tag to publish (e.g. v1.2.0 or gonum/v1.2.0).
+    required: true
+  repo:
+    description: owner/name used in the verification instructions.
+    required: true
+  github-token:
+    description: Token used by the gh CLI to create the release.
+    required: true
+  sbom:
+    description: SBOM filename inside the dist directory.
+    required: true
+  dist-dir:
+    description: Directory containing the release artifacts.
+    required: false
+    default: dist
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        TAG: ${{ inputs.tag }}
+        REPO: ${{ inputs.repo }}
+        SBOM: ${{ inputs.sbom }}
+        DIST_DIR: ${{ inputs.dist-dir }}
+      run: bash "${GITHUB_ACTION_PATH}/create-release.bash"

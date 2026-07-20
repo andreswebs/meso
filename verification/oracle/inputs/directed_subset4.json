@@ -1,0 +1,28 @@
+{
+  "n": 4,
+  "directed": true,
+  "edges": [
+    [0, 1, 1],
+    [0, 3, 1],
+    [1, 0, 3],
+    [1, 2, 1],
+    [1, 3, 5],
+    [2, 0, 2],
+    [3, 2, 5]
+  ],
+  "nodeSizes": [1, 1, 1, 1],
+  "cases": [
+    {
+      "quality": "directedModularity",
+      "gamma": "1",
+      "partition": [0, 0, 0, 0],
+      "deltas": [{ "node": 0, "target": 1 }]
+    },
+    {
+      "quality": "directedModularity",
+      "gamma": "1",
+      "partition": [0, 0, 1, 1],
+      "deltas": [{ "node": 2, "target": 0 }]
+    }
+  ]
+}

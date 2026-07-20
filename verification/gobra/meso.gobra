@@ -1,0 +1,137 @@
+// Companion specification file for the Gobra proof over parallel.go. It
+// declares everything parallel.go references from package files that are
+// never fed to the verifier: mirror declarations of the types involved
+// (which must stay type-identical to their Go definitions; drift is caught
+// only by the Gobra run, not by the Go compiler), read-only access
+// predicates over them, and the trusted bodiless footprint contract of
+// bestMove. Verified by feeding it together with parallel.go via -i.
+package meso
+
+import "sync"
+
+// Mirror of graph.go's adjacency: one direction's CSR arrays.
+type adjacency struct {
+	offsets   []int
+	neighbors []int
+	weights   []float64
+}
+
+// Mirror of graph.go's csr: the compact weighted-graph model. One field
+// diverges by name: the in-adjacency is called in in graph.go, but in is a
+// reserved keyword of Gobra's specification syntax (sequence membership),
+// so the mirror calls it inAdj. The rename is safe because no file fed to
+// the verifier ever accesses csr fields: parallel.go only calls the
+// bodiless numNodes and the opaque bestMove.
+type csr struct {
+	n         int
+	directed  bool
+	out       adjacency
+	inAdj     adjacency
+	selfLoops []float64
+	nodeSizes []float64
+}
+
+// Mirror of partition.go's Partition.
+type Partition []int
+
+// Mirror of louvain.go's objective, narrowed to the single method
+// parallel.go mentions (moveDelta, called from the unverified
+// parallelRound). The real interface also embeds QualityFunction; only
+// type-level agreement on what parallel.go touches matters for encoding.
+type objective interface {
+	moveDelta(g *csr, p Partition, u, target int) float64
+}
+
+// Mirror of louvain.go's moveImproveEps, declared without its value: the
+// real declaration is a const with a float literal, which must stay out of
+// the verifier's input (the frontend rejects float literals), and only
+// type-level agreement matters for encoding the unverified parallelRound.
+var moveImproveEps float64
+
+// csrMem is read-vocabulary over a graph: the struct fields plus every
+// element of the six payload slices. Verified code only ever holds
+// wildcard fractions of it (acc(csrMem(g), _)); the graph is immutable
+// during the fork-join.
+pred csrMem(g *csr) {
+	acc(g) &&
+	(forall i int :: 0 <= i && i < len(g.out.offsets) ==> acc(&g.out.offsets[i])) &&
+	(forall i int :: 0 <= i && i < len(g.out.neighbors) ==> acc(&g.out.neighbors[i])) &&
+	(forall i int :: 0 <= i && i < len(g.out.weights) ==> acc(&g.out.weights[i])) &&
+	(forall i int :: 0 <= i && i < len(g.inAdj.offsets) ==> acc(&g.inAdj.offsets[i])) &&
+	(forall i int :: 0 <= i && i < len(g.inAdj.neighbors) ==> acc(&g.inAdj.neighbors[i])) &&
+	(forall i int :: 0 <= i && i < len(g.inAdj.weights) ==> acc(&g.inAdj.weights[i])) &&
+	(forall i int :: 0 <= i && i < len(g.selfLoops) ==> acc(&g.selfLoops[i])) &&
+	(forall i int :: 0 <= i && i < len(g.nodeSizes) ==> acc(&g.nodeSizes[i]))
+}
+
+// partitionMem is read-vocabulary over a round-start snapshot partition:
+// every element. As with csrMem, verified code holds wildcard fractions;
+// the snapshot is immutable during the fork-join.
+pred partitionMem(p Partition) {
+	forall i int :: 0 <= i && i < len(p) ==> acc(&p[i])
+}
+
+// rangeAcc is one worker's write permission: full access to t[lo:hi] and
+// gain[lo:hi]. It is the unit the fork-join splits at spawn and redeems
+// at the join. (Named rangeAcc rather than chunk because parallelBestMoves
+// has a local variable chunk that would shadow a predicate of that name.)
+pred rangeAcc(t []int, gain []float64, lo int, hi int) {
+	0 <= lo && lo <= hi && hi <= len(t) && len(t) == len(gain) &&
+	(forall i int :: lo <= i && i < hi ==> acc(&t[i])) &&
+	(forall i int :: lo <= i && i < hi ==> acc(&gain[i]))
+}
+
+// redeem walks the rangeAcc tokens redeemed by Wait and reassembles full
+// permission over t[los[k]:] and gain[los[k]:] from the per-chunk pieces.
+ghost
+requires len(t) == len(gain)
+requires len(los) == len(tokens) && len(his) == len(tokens)
+requires 0 <= k && k <= len(tokens)
+requires forall j int :: k <= j && j < len(tokens) ==> 0 <= los[j] && los[j] < his[j] && his[j] <= len(t)
+requires forall j int :: k <= j && j < len(tokens)-1 ==> his[j] == los[j+1]
+requires len(tokens) > 0 ==> his[len(tokens)-1] == len(t)
+requires forall j int :: k <= j && j < len(tokens) ==> tokens[j] == rangeAcc{t, gain, los[j], his[j]}
+requires forall j int :: k <= j && j < len(tokens) ==> sync.InjEval(tokens[j], j)
+ensures forall i int :: (k < len(tokens) ? los[k] : len(t)) <= i && i < len(t) ==> acc(&t[i]) && acc(&gain[i])
+decreases len(tokens) - k
+func redeem(t []int, gain []float64, los seq[int], his seq[int], tokens seq[pred()], k int) {
+	if k < len(tokens) {
+		unfold sync.InjEval(tokens[k], k)
+		unfold rangeAcc{t, gain, los[k], his[k]}()
+		redeem(t, gain, los, his, tokens, k+1)
+	}
+}
+
+// Go's min builtin (go1.21), which Gobra's frontend does not know: this
+// package-level declaration is what the identifier resolves to under
+// verification, while the Go compiler (which never sees this file) keeps
+// resolving to the builtin. Bodiless because a body cannot be written
+// here: the conditional expression is ghost-only syntax and cannot
+// produce a non-ghost result. The two postconditions are the builtin's
+// complete two-argument semantics, so this is a trusted axiom, registered
+// in the README's trusted assumption register. Declared for int only: the
+// builtin is generic, but int is the only instantiation the verified code
+// uses.
+ensures a <= b ==> res == a
+ensures b <= a ==> res == b
+decreases
+pure func min(a int, b int) (res int)
+
+// Mirror of graph.go's numNodes, made pure so contracts can relate slice
+// lengths to it. The postcondition mirrors the csr invariant that n counts
+// nodes; it is what discharges make([]int, n) in parallelBestMoves.
+requires acc(csrMem(g), _)
+ensures 0 <= res
+decreases
+pure func (g *csr) numNodes() (res int)
+
+// The trusted footprint contract of bestMove (louvain.go), the opaque leaf
+// of the fork-join: it reads the graph and the snapshot partition
+// immutably and writes nothing shared. No ensures beyond the defaults: the
+// race-freedom proof needs only the footprint, never the values. This is
+// the single trusted assumption on the hot path; it is registered in the
+// README's trusted assumption register.
+requires acc(csrMem(g), _)
+requires acc(partitionMem(p), _)
+requires 0 <= u && u < len(p)
+func bestMove(g *csr, obj objective, p Partition, u, isolateLabel int) (target int, score float64)

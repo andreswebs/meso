@@ -1,0 +1,28 @@
+{"provenance":
+ {"leanToolchain": "leanprover/lean4:v4.31.0",
+  "inputSet": "directed_cycles6",
+  "generator": "mesoOracle"},
+ "n": 6,
+ "directed": true,
+ "cases":
+ [{"value": {"num": "18", "den": "49", "approx": "0.367347"},
+   "quality": "directedModularity",
+   "predicates":
+   {"subsetOptimal": true, "gammaSeparated": true, "connected": true},
+   "gamma": "1",
+   "deltas":
+   [{"value": {"num": "-12", "den": "49", "approx": "-0.244898"},
+     "target": 0,
+     "node": 3}]},
+  {"value": {"num": "0", "den": "1", "approx": "0.000000"},
+   "quality": "directedModularity",
+   "predicates":
+   {"subsetOptimal": false, "gammaSeparated": true, "connected": true},
+   "gamma": "1",
+   "deltas": []},
+  {"value": {"num": "4", "den": "49", "approx": "0.081633"},
+   "quality": "directedModularity",
+   "predicates":
+   {"subsetOptimal": true, "gammaSeparated": false, "connected": true},
+   "gamma": "1",
+   "deltas": []}]}

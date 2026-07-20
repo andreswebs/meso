@@ -1,0 +1,22 @@
+{
+  "n": 3,
+  "edges": [[0, 1, 1], [1, 2, 1]],
+  "nodeSizes": [1, 1, 1],
+  "cases": [
+    {
+      "quality": "modularity",
+      "gamma": "1",
+      "partition": [0, 0, 1]
+    },
+    {
+      "quality": "cpm",
+      "gamma": "1/2",
+      "partition": [0, 0, 1]
+    },
+    {
+      "quality": "modularity",
+      "gamma": "1",
+      "partition": [0, 1, 0]
+    }
+  ]
+}

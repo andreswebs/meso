@@ -1,0 +1,42 @@
+{"provenance":
+ {"leanToolchain": "leanprover/lean4:v4.31.0",
+  "inputSet": "square",
+  "generator": "mesoOracle"},
+ "n": 4,
+ "cases":
+ [{"value": {"num": "0", "den": "1", "approx": "0.000000"},
+   "quality": "modularity",
+   "predicates":
+   {"subsetOptimal": true,
+    "gammaSeparated": true,
+    "gammaDense": false,
+    "connected": true},
+   "gamma": "1",
+   "deltas": []},
+  {"value": {"num": "0", "den": "1", "approx": "0.000000"},
+   "quality": "cpm",
+   "predicates":
+   {"subsetOptimal": true,
+    "gammaSeparated": true,
+    "gammaDense": false,
+    "connected": true},
+   "gamma": "1",
+   "deltas": []},
+  {"value": {"num": "4", "den": "1", "approx": "4.000000"},
+   "quality": "cpm",
+   "predicates":
+   {"subsetOptimal": true,
+    "gammaSeparated": true,
+    "gammaDense": true,
+    "connected": true},
+   "gamma": "1/3",
+   "deltas": []},
+  {"value": {"num": "-4", "den": "1", "approx": "-4.000000"},
+   "quality": "cpm",
+   "predicates":
+   {"subsetOptimal": false,
+    "gammaSeparated": true,
+    "gammaDense": false,
+    "connected": true},
+   "gamma": "1",
+   "deltas": []}]}

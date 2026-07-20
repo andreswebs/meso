@@ -1,0 +1,147 @@
+{
+  "graph": "karate",
+  "algorithm": "louvain",
+  "quality": "modularity",
+  "gamma": 1,
+  "seed": 0,
+  "communities": 4,
+  "modularity": "0.4188034188034182",
+  "partition": [
+    {
+      "node": "1",
+      "community": 0
+    },
+    {
+      "node": "2",
+      "community": 0
+    },
+    {
+      "node": "3",
+      "community": 0
+    },
+    {
+      "node": "4",
+      "community": 0
+    },
+    {
+      "node": "5",
+      "community": 1
+    },
+    {
+      "node": "6",
+      "community": 1
+    },
+    {
+      "node": "7",
+      "community": 1
+    },
+    {
+      "node": "8",
+      "community": 0
+    },
+    {
+      "node": "9",
+      "community": 2
+    },
+    {
+      "node": "10",
+      "community": 0
+    },
+    {
+      "node": "11",
+      "community": 1
+    },
+    {
+      "node": "12",
+      "community": 0
+    },
+    {
+      "node": "13",
+      "community": 0
+    },
+    {
+      "node": "14",
+      "community": 0
+    },
+    {
+      "node": "15",
+      "community": 2
+    },
+    {
+      "node": "16",
+      "community": 2
+    },
+    {
+      "node": "17",
+      "community": 1
+    },
+    {
+      "node": "18",
+      "community": 0
+    },
+    {
+      "node": "19",
+      "community": 2
+    },
+    {
+      "node": "20",
+      "community": 0
+    },
+    {
+      "node": "21",
+      "community": 2
+    },
+    {
+      "node": "22",
+      "community": 0
+    },
+    {
+      "node": "23",
+      "community": 2
+    },
+    {
+      "node": "24",
+      "community": 3
+    },
+    {
+      "node": "25",
+      "community": 3
+    },
+    {
+      "node": "26",
+      "community": 3
+    },
+    {
+      "node": "27",
+      "community": 2
+    },
+    {
+      "node": "28",
+      "community": 3
+    },
+    {
+      "node": "29",
+      "community": 3
+    },
+    {
+      "node": "30",
+      "community": 2
+    },
+    {
+      "node": "31",
+      "community": 2
+    },
+    {
+      "node": "32",
+      "community": 3
+    },
+    {
+      "node": "33",
+      "community": 2
+    },
+    {
+      "node": "34",
+      "community": 2
+    }
+  ]
+}

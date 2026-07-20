@@ -1,0 +1,15 @@
+---
+id: mes-njtw
+status: open
+deps: []
+links: [mes-uf67]
+created: 2026-07-20T15:08:08Z
+type: chore
+priority: 4
+assignee: Andre Silva
+tags: [ci, infra, supply-chain]
+---
+
+# OpenSSF Scorecard lane
+
+Deferred follow-up from mes-uf67. Add the OpenSSF Scorecard scheduled workflow (ossf/scorecard-action, SHA-pinned): weekly cron plus push to main, publish_results true so the score reaches the OpenSSF API, SARIF upload optional. Scorecard proves the posture the hardening work established (pinned actions, least-privilege tokens, branch protection); enable once branch protection rulesets are configured on the repo so the check does not score against their absence. Consider the README badge when the score is presentable.

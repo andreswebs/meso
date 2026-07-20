@@ -1,0 +1,259 @@
+{
+  "graph": "dolphins",
+  "algorithm": "louvain",
+  "quality": "modularity",
+  "gamma": 1,
+  "seed": 0,
+  "communities": 5,
+  "modularity": "0.5185317036509619",
+  "partition": [
+    {
+      "node": "0",
+      "community": 0
+    },
+    {
+      "node": "1",
+      "community": 1
+    },
+    {
+      "node": "2",
+      "community": 0
+    },
+    {
+      "node": "3",
+      "community": 2
+    },
+    {
+      "node": "4",
+      "community": 2
+    },
+    {
+      "node": "5",
+      "community": 3
+    },
+    {
+      "node": "6",
+      "community": 3
+    },
+    {
+      "node": "7",
+      "community": 1
+    },
+    {
+      "node": "8",
+      "community": 2
+    },
+    {
+      "node": "9",
+      "community": 3
+    },
+    {
+      "node": "10",
+      "community": 0
+    },
+    {
+      "node": "11",
+      "community": 2
+    },
+    {
+      "node": "12",
+      "community": 4
+    },
+    {
+      "node": "13",
+      "community": 3
+    },
+    {
+      "node": "14",
+      "community": 4
+    },
+    {
+      "node": "15",
+      "community": 2
+    },
+    {
+      "node": "16",
+      "community": 4
+    },
+    {
+      "node": "17",
+      "community": 3
+    },
+    {
+      "node": "18",
+      "community": 2
+    },
+    {
+      "node": "19",
+      "community": 1
+    },
+    {
+      "node": "20",
+      "community": 4
+    },
+    {
+      "node": "21",
+      "community": 2
+    },
+    {
+      "node": "22",
+      "community": 3
+    },
+    {
+      "node": "23",
+      "community": 2
+    },
+    {
+      "node": "24",
+      "community": 2
+    },
+    {
+      "node": "25",
+      "community": 1
+    },
+    {
+      "node": "26",
+      "community": 1
+    },
+    {
+      "node": "27",
+      "community": 1
+    },
+    {
+      "node": "28",
+      "community": 1
+    },
+    {
+      "node": "29",
+      "community": 2
+    },
+    {
+      "node": "30",
+      "community": 1
+    },
+    {
+      "node": "31",
+      "community": 3
+    },
+    {
+      "node": "32",
+      "community": 3
+    },
+    {
+      "node": "33",
+      "community": 4
+    },
+    {
+      "node": "34",
+      "community": 4
+    },
+    {
+      "node": "35",
+      "community": 2
+    },
+    {
+      "node": "36",
+      "community": 4
+    },
+    {
+      "node": "37",
+      "community": 4
+    },
+    {
+      "node": "38",
+      "community": 4
+    },
+    {
+      "node": "39",
+      "community": 4
+    },
+    {
+      "node": "40",
+      "community": 4
+    },
+    {
+      "node": "41",
+      "community": 3
+    },
+    {
+      "node": "42",
+      "community": 0
+    },
+    {
+      "node": "43",
+      "community": 4
+    },
+    {
+      "node": "44",
+      "community": 4
+    },
+    {
+      "node": "45",
+      "community": 2
+    },
+    {
+      "node": "46",
+      "community": 4
+    },
+    {
+      "node": "47",
+      "community": 0
+    },
+    {
+      "node": "48",
+      "community": 3
+    },
+    {
+      "node": "49",
+      "community": 4
+    },
+    {
+      "node": "50",
+      "community": 4
+    },
+    {
+      "node": "51",
+      "community": 2
+    },
+    {
+      "node": "52",
+      "community": 4
+    },
+    {
+      "node": "53",
+      "community": 0
+    },
+    {
+      "node": "54",
+      "community": 3
+    },
+    {
+      "node": "55",
+      "community": 2
+    },
+    {
+      "node": "56",
+      "community": 3
+    },
+    {
+      "node": "57",
+      "community": 3
+    },
+    {
+      "node": "58",
+      "community": 4
+    },
+    {
+      "node": "59",
+      "community": 2
+    },
+    {
+      "node": "60",
+      "community": 3
+    },
+    {
+      "node": "61",
+      "community": 0
+    }
+  ]
+}

@@ -1,0 +1,31 @@
+---
+name: Lean CI
+
+on:
+  workflow_dispatch: {}
+  push:
+    paths:
+      - "verification/lean/**"
+      - .github/workflows/lean-ci.yml
+  pull_request:
+    paths:
+      - "verification/lean/**"
+      - .github/workflows/lean-ci.yml
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: leanprover/lean-action@38fbc41a8c28c4cbaec22d7f7de508ec2e7c0dd9 # v1.5.0
+        with:
+          lake-package-directory: verification/lean
+      # Lean API-docs generation + GitHub Pages deploy. Disabled for now.
+      # To enable: add `pages: write` and `id-token: write` to the `permissions`
+      # block above, and set the repo's Pages source to "GitHub Actions".
+      # - uses: leanprover-community/docgen-action@56dff2bb89f3e9b8c1b6d5c8410362c19de2d904 # v1
+      #   with:
+      #     lake-package-directory: verification/lean

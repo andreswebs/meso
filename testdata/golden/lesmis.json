@@ -1,0 +1,319 @@
+{
+  "graph": "lesmis",
+  "algorithm": "louvain",
+  "quality": "modularity",
+  "gamma": 1,
+  "seed": 0,
+  "communities": 6,
+  "modularity": "0.5654156751933391",
+  "partition": [
+    {
+      "node": "0",
+      "community": 0
+    },
+    {
+      "node": "1",
+      "community": 0
+    },
+    {
+      "node": "2",
+      "community": 0
+    },
+    {
+      "node": "3",
+      "community": 0
+    },
+    {
+      "node": "4",
+      "community": 0
+    },
+    {
+      "node": "5",
+      "community": 0
+    },
+    {
+      "node": "6",
+      "community": 0
+    },
+    {
+      "node": "7",
+      "community": 0
+    },
+    {
+      "node": "8",
+      "community": 0
+    },
+    {
+      "node": "9",
+      "community": 0
+    },
+    {
+      "node": "10",
+      "community": 1
+    },
+    {
+      "node": "11",
+      "community": 1
+    },
+    {
+      "node": "12",
+      "community": 2
+    },
+    {
+      "node": "13",
+      "community": 1
+    },
+    {
+      "node": "14",
+      "community": 1
+    },
+    {
+      "node": "15",
+      "community": 1
+    },
+    {
+      "node": "16",
+      "community": 2
+    },
+    {
+      "node": "17",
+      "community": 2
+    },
+    {
+      "node": "18",
+      "community": 2
+    },
+    {
+      "node": "19",
+      "community": 2
+    },
+    {
+      "node": "20",
+      "community": 2
+    },
+    {
+      "node": "21",
+      "community": 2
+    },
+    {
+      "node": "22",
+      "community": 2
+    },
+    {
+      "node": "23",
+      "community": 2
+    },
+    {
+      "node": "24",
+      "community": 3
+    },
+    {
+      "node": "25",
+      "community": 3
+    },
+    {
+      "node": "26",
+      "community": 1
+    },
+    {
+      "node": "27",
+      "community": 1
+    },
+    {
+      "node": "28",
+      "community": 1
+    },
+    {
+      "node": "29",
+      "community": 4
+    },
+    {
+      "node": "30",
+      "community": 1
+    },
+    {
+      "node": "31",
+      "community": 1
+    },
+    {
+      "node": "32",
+      "community": 1
+    },
+    {
+      "node": "33",
+      "community": 1
+    },
+    {
+      "node": "34",
+      "community": 4
+    },
+    {
+      "node": "35",
+      "community": 4
+    },
+    {
+      "node": "36",
+      "community": 4
+    },
+    {
+      "node": "37",
+      "community": 4
+    },
+    {
+      "node": "38",
+      "community": 4
+    },
+    {
+      "node": "39",
+      "community": 1
+    },
+    {
+      "node": "40",
+      "community": 3
+    },
+    {
+      "node": "41",
+      "community": 3
+    },
+    {
+      "node": "42",
+      "community": 3
+    },
+    {
+      "node": "43",
+      "community": 1
+    },
+    {
+      "node": "44",
+      "community": 1
+    },
+    {
+      "node": "45",
+      "community": 1
+    },
+    {
+      "node": "46",
+      "community": 5
+    },
+    {
+      "node": "47",
+      "community": 5
+    },
+    {
+      "node": "48",
+      "community": 5
+    },
+    {
+      "node": "49",
+      "community": 1
+    },
+    {
+      "node": "50",
+      "community": 1
+    },
+    {
+      "node": "51",
+      "community": 1
+    },
+    {
+      "node": "52",
+      "community": 1
+    },
+    {
+      "node": "53",
+      "community": 1
+    },
+    {
+      "node": "54",
+      "community": 1
+    },
+    {
+      "node": "55",
+      "community": 1
+    },
+    {
+      "node": "56",
+      "community": 1
+    },
+    {
+      "node": "57",
+      "community": 5
+    },
+    {
+      "node": "58",
+      "community": 5
+    },
+    {
+      "node": "59",
+      "community": 5
+    },
+    {
+      "node": "60",
+      "community": 5
+    },
+    {
+      "node": "61",
+      "community": 5
+    },
+    {
+      "node": "62",
+      "community": 5
+    },
+    {
+      "node": "63",
+      "community": 5
+    },
+    {
+      "node": "64",
+      "community": 5
+    },
+    {
+      "node": "65",
+      "community": 5
+    },
+    {
+      "node": "66",
+      "community": 5
+    },
+    {
+      "node": "67",
+      "community": 5
+    },
+    {
+      "node": "68",
+      "community": 3
+    },
+    {
+      "node": "69",
+      "community": 3
+    },
+    {
+      "node": "70",
+      "community": 3
+    },
+    {
+      "node": "71",
+      "community": 3
+    },
+    {
+      "node": "72",
+      "community": 1
+    },
+    {
+      "node": "73",
+      "community": 5
+    },
+    {
+      "node": "74",
+      "community": 5
+    },
+    {
+      "node": "75",
+      "community": 3
+    },
+    {
+      "node": "76",
+      "community": 5
+    }
+  ]
+}

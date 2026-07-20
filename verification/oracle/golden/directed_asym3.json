@@ -1,0 +1,52 @@
+{"provenance":
+ {"leanToolchain": "leanprover/lean4:v4.31.0",
+  "inputSet": "directed_asym3",
+  "generator": "mesoOracle"},
+ "n": 3,
+ "directed": true,
+ "cases":
+ [{"value": {"num": "0", "den": "1", "approx": "0.000000"},
+   "quality": "directedModularity",
+   "predicates":
+   {"subsetOptimal": true, "gammaSeparated": true, "connected": true},
+   "gamma": "1",
+   "deltas":
+   [{"value": {"num": "0", "den": "1", "approx": "0.000000"},
+     "target": 1,
+     "node": 2}]},
+  {"value": {"num": "-5", "den": "16", "approx": "-0.312500"},
+   "quality": "directedModularity",
+   "predicates":
+   {"subsetOptimal": true, "gammaSeparated": false, "connected": true},
+   "gamma": "1",
+   "deltas":
+   [{"value": {"num": "5", "den": "16", "approx": "0.312500"},
+     "target": 0,
+     "node": 1}]},
+  {"value": {"num": "-5", "den": "8", "approx": "-0.625000"},
+   "quality": "directedModularity",
+   "predicates":
+   {"subsetOptimal": true, "gammaSeparated": true, "connected": true},
+   "gamma": "2",
+   "deltas": []},
+  {"value": {"num": "0", "den": "1", "approx": "0.000000"},
+   "quality": "directedModularity",
+   "predicates":
+   {"subsetOptimal": true, "gammaSeparated": true, "connected": true},
+   "gamma": "1",
+   "deltas":
+   [{"value": {"num": "0", "den": "1", "approx": "0.000000"},
+     "target": 0,
+     "node": 2}]},
+  {"value": {"num": "-1", "den": "4", "approx": "-0.250000"},
+   "quality": "directedModularity",
+   "predicates":
+   {"subsetOptimal": true, "gammaSeparated": false, "connected": true},
+   "gamma": "1",
+   "deltas": []},
+  {"value": {"num": "-3", "den": "8", "approx": "-0.375000"},
+   "quality": "directedModularity",
+   "predicates":
+   {"subsetOptimal": false, "gammaSeparated": false, "connected": false},
+   "gamma": "1",
+   "deltas": []}]}

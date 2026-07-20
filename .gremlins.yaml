@@ -1,0 +1,21 @@
+# Mutation-score gate for the meso core, enforced by `make mutation`.
+#
+# gremlins reads the efficacy threshold ONLY from this file. In v0.6.0 the
+# --threshold-* CLI flags are parsed as strings and silently ignored (the gate
+# never fires), so the committed threshold has to live here. Efficacy is
+# killed / (killed + survived); gremlins exits non-zero when efficacy is at or
+# below the threshold. Every other run setting (workers, timeout coefficient,
+# excluded files) is passed as a flag by the Makefile target.
+#
+# The core scores 89.04% efficacy (390 killed / 438 killed+survived). Survivors
+# are triaged in docs/specs/learnings.md: real coverage gaps got a test back in
+# the owning file, the rest are documented equivalent mutants (epsilon boundaries
+# never hit exactly, order-invariant sort comparators, error-message-only
+# arithmetic, validator boundaries unreachable for valid graphs, and the
+# worker-count-invariant parallel mechanics whose mutations cannot change output).
+# The threshold sits a few points below the achieved score so the gate holds
+# without being brittle to a single new equivalent mutant or a load-induced
+# timeout.
+unleash:
+  threshold:
+    efficacy: 85

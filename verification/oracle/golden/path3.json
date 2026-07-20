@@ -1,0 +1,33 @@
+{"provenance":
+ {"leanToolchain": "leanprover/lean4:v4.31.0",
+  "inputSet": "path3",
+  "generator": "mesoOracle"},
+ "n": 3,
+ "cases":
+ [{"value": {"num": "-1", "den": "8", "approx": "-0.125000"},
+   "quality": "modularity",
+   "predicates":
+   {"subsetOptimal": true,
+    "gammaSeparated": true,
+    "gammaDense": false,
+    "connected": true},
+   "gamma": "1",
+   "deltas": []},
+  {"value": {"num": "1", "den": "1", "approx": "1.000000"},
+   "quality": "cpm",
+   "predicates":
+   {"subsetOptimal": true,
+    "gammaSeparated": true,
+    "gammaDense": false,
+    "connected": true},
+   "gamma": "1/2",
+   "deltas": []},
+  {"value": {"num": "-1", "den": "2", "approx": "-0.500000"},
+   "quality": "modularity",
+   "predicates":
+   {"subsetOptimal": false,
+    "gammaSeparated": true,
+    "gammaDense": false,
+    "connected": false},
+   "gamma": "1",
+   "deltas": []}]}

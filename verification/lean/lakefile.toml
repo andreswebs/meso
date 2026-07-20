@@ -1,0 +1,23 @@
+name = "meso"
+version = "0.1.0"
+keywords = ["math"]
+defaultTargets = ["Meso"]
+
+[leanOptions]
+pp.unicode.fun = true # pretty-prints `fun a ↦ b`
+relaxedAutoImplicit = false
+weak.linter.mathlibStandardSet = true
+weak.linter.style.header = false # meso is GPLv3; Mathlib's linter wants Apache headers
+maxSynthPendingDepth = 3
+
+[[require]]
+name = "mathlib"
+scope = "leanprover-community"
+rev = "v4.31.0"
+
+[[lean_lib]]
+name = "Meso"
+
+[[lean_exe]]
+name = "mesoOracle"
+root = "Main"

@@ -1,0 +1,19 @@
+{"provenance":
+ {"leanToolchain": "leanprover/lean4:v4.31.0",
+  "inputSet": "celegansneural",
+  "generator": "mesoOracle"},
+ "n": 297,
+ "directed": true,
+ "cases":
+ [{"value": {"num": "0", "den": "1", "approx": "0.000000"},
+   "quality": "directedModularity",
+   "predicates":
+   {"subsetOptimal": null, "gammaSeparated": true, "connected": true},
+   "gamma": "1",
+   "deltas": []},
+  {"value": {"num": "-383325", "den": "77774761", "approx": "-0.004929"},
+   "quality": "directedModularity",
+   "predicates":
+   {"subsetOptimal": null, "gammaSeparated": false, "connected": true},
+   "gamma": "1",
+   "deltas": []}]}

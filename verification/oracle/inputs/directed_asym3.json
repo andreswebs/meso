@@ -1,0 +1,41 @@
+{
+  "n": 3,
+  "directed": true,
+  "edges": [[0, 1, 2], [0, 2, 1], [1, 0, 1]],
+  "nodeSizes": [1, 1, 1],
+  "cases": [
+    {
+      "quality": "directedModularity",
+      "gamma": "1",
+      "partition": [0, 0, 0],
+      "deltas": [{ "node": 2, "target": 1 }]
+    },
+    {
+      "quality": "directedModularity",
+      "gamma": "1",
+      "partition": [0, 1, 2],
+      "deltas": [{ "node": 1, "target": 0 }]
+    },
+    {
+      "quality": "directedModularity",
+      "gamma": "2",
+      "partition": [0, 1, 2]
+    },
+    {
+      "quality": "directedModularity",
+      "gamma": "1",
+      "partition": [0, 0, 1],
+      "deltas": [{ "node": 2, "target": 0 }]
+    },
+    {
+      "quality": "directedModularity",
+      "gamma": "1",
+      "partition": [0, 1, 0]
+    },
+    {
+      "quality": "directedModularity",
+      "gamma": "1",
+      "partition": [0, 1, 1]
+    }
+  ]
+}

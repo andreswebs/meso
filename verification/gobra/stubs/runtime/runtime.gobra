@@ -1,0 +1,16 @@
+// Trusted specification stub for the standard-library runtime package.
+// Gobra's bundled stubs do not cover runtime, and parallel.go calls
+// runtime.GOMAXPROCS, so the declaration must resolve from an include
+// directory. Every member declared here is an axiom: it is assumed, not
+// verified, and must be listed in the trusted assumption register in the
+// README one directory up.
+package runtime
+
+// GOMAXPROCS never reports fewer than one processor: with n <= 0 it
+// returns the current setting without changing it, and the setting is
+// always at least 1. The postcondition is load-bearing for crash safety:
+// normalizeWorkers relies on it to establish workers >= 1, which in turn
+// discharges the division-by-zero check on the chunk-size computation in
+// parallelBestMoves.
+ensures res >= 1
+func GOMAXPROCS(n int) (res int)

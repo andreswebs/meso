@@ -1,0 +1,110 @@
+---
+name: Release
+
+# A Go library release is a version tag: the module proxy serves the source
+# with sum.golang.org integrity, so no source artifact is built. Each release
+# publishes verifiable metadata only: the released module's SBOM, a checksums
+# file over it, Sigstore keyless signatures (cosign bundles) on both, and
+# SLSA build provenance (GitHub attestation) for the checksummed artifacts.
+# Per-module tags: v*.*.* releases the core module, gonum/v*.*.* the nested
+# gonum adapter.
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+      - "gonum/v*.*.*"
+
+permissions:
+  # gh release create publishes the release.
+  contents: write
+  # Sigstore keyless signing and the provenance attestation exchange the
+  # job's OIDC token for a short-lived certificate.
+  id-token: write
+  attestations: write
+
+jobs:
+  release:
+    name: validate & publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          # Full history and tags so generated notes resolve correctly.
+          fetch-depth: 0
+
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+
+      - name: Install golangci-lint
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: v2.12.2
+          install-only: true
+
+      - name: Validate
+        run: make validate
+
+      # The tag prefix names the released module: bare v*.*.* tags release
+      # the core, gonum/v*.*.* tags release the nested adapter.
+      - name: Resolve module from tag
+        id: module
+        run: |
+          case "${GITHUB_REF_NAME}" in
+          gonum/*)
+            echo "dir=gonum" >>"${GITHUB_OUTPUT}"
+            echo "name=meso-gonum" >>"${GITHUB_OUTPUT}"
+            echo "version=${GITHUB_REF_NAME#gonum/}" >>"${GITHUB_OUTPUT}"
+            ;;
+          *)
+            echo "dir=." >>"${GITHUB_OUTPUT}"
+            echo "name=meso" >>"${GITHUB_OUTPUT}"
+            echo "version=${GITHUB_REF_NAME}" >>"${GITHUB_OUTPUT}"
+            ;;
+          esac
+
+      # sbom-action does not create the output file's parent directory.
+      - name: Prepare dist directory
+        run: mkdir -p dist
+
+      - name: Generate SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        env:
+          SYFT_SOURCE_NAME: ${{ steps.module.outputs.name }}
+          SYFT_SOURCE_VERSION: ${{ steps.module.outputs.version }}
+        with:
+          path: ${{ steps.module.outputs.dir }}
+          format: spdx-json
+          output-file: dist/${{ steps.module.outputs.name }}-${{ steps.module.outputs.version }}.spdx.json
+          upload-artifact: false
+
+      - name: Write checksums
+        run: cd dist && sha256sum -- *.spdx.json > SHA256SUMS.txt
+
+      # cosign-installer v4 installs cosign v3.x, which writes the standardized
+      # Sigstore bundle format (.sigstore.json). Consumers need cosign v3+ to
+      # verify.
+      - name: Install cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      - name: Sign checksums
+        run: cosign sign-blob --yes --bundle dist/SHA256SUMS.txt.sigstore.json dist/SHA256SUMS.txt
+
+      - name: Sign SBOM
+        env:
+          SBOM: dist/${{ steps.module.outputs.name }}-${{ steps.module.outputs.version }}.spdx.json
+        run: cosign sign-blob --yes --bundle "${SBOM}.sigstore.json" "${SBOM}"
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
+        with:
+          subject-checksums: dist/SHA256SUMS.txt
+
+      - name: Create GitHub release
+        uses: ./.github/actions/gh-release
+        with:
+          tag: ${{ github.ref_name }}
+          repo: ${{ github.repository }}
+          github-token: ${{ github.token }}
+          sbom: ${{ steps.module.outputs.name }}-${{ steps.module.outputs.version }}.spdx.json
