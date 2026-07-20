@@ -7,8 +7,6 @@ module github.com/andreswebs/meso/gonum
 go 1.26.5
 
 require (
-	github.com/andreswebs/meso v0.0.0
+	github.com/andreswebs/meso v0.1.0
 	gonum.org/v1/gonum v0.17.0
 )
-
-replace github.com/andreswebs/meso => ../
