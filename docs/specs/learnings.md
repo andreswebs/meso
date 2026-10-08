@@ -1526,3 +1526,26 @@ kept for whoever picks up the next step.
   NOT COVERED are the 8 `switch`-case artifacts in `accessors.go` (killed by
   hand, see mes-5e63) and 4 spec 001 lines. `go.mod` byte-identical after the
   run.
+
+## Spec 002: benchmark baseline moved to the CI runner (post-release CI fix)
+
+- The first CI run after spec 002 failed the benchmark gate. Two causes:
+  - Real allocation growth that slipped past `make validate`, which never runs
+    benchmarks: the level hierarchy (mes-rogj) adds 4 allocations per Leiden
+    run and 2 per Louvain run (the stored level partitions and qualities;
+    intended), and removing the Subgraph self-loop guard (mes-5e63) added 4
+    per call (a builder map entry per member; reverted, the guard now says
+    why it stays). Lesson: run `make bench-check` before closing any ticket
+    that touches an algorithm or a constructor on the hot path.
+  - Cross-machine timing: CI's linux/amd64 runner ran 1.55x to 2.19x slower
+    than the linux/arm64 container on the maintainer's Mac where the baseline
+    was recorded, against a 2x ns/op tolerance. Louvain already sat at 1.93x,
+    so the headroom had been thin all along; the new short benchmarks crossed
+    it.
+- Decided with the maintainer on 2026-10-08: record the baseline on the CI
+  runner itself. The manual `Bench baseline` workflow
+  (`.github/workflows/bench-baseline.yml`) runs `make bench-baseline` on
+  `ubuntu-latest` and uploads `baseline.txt` as an artifact to commit. This
+  supersedes the container procedure recorded under mes-rfgu above. A local
+  `make bench-check` now compares a Mac against amd64 runner numbers, so its
+  ns/op verdict is advisory; its allocs/op verdict stays exact.
