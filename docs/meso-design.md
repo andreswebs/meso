@@ -28,7 +28,7 @@ Goals:
 
 Non-goals: graph layout/visualization (the VOS technique in the Java reference is
 out of scope), graph storage, or anything beyond partitioning a weighted graph
-into communities.
+into communities and the structural measures that describe them (section 4.6).
 
 ## 2. Scope
 
@@ -39,6 +39,10 @@ In scope:
   Potts Model) for undirected graphs; directed modularity for directed graphs.
 - Graph types: undirected weighted and directed weighted, with node weights/sizes;
   self-loops and parallel edges folded into edge weights.
+- Structural measures (v0.2.0, section 4.6): graph and result accessors, node
+  betweenness centrality, community cohesion, and the canonical induced
+  subgraph, so callers can analyse mesoscale structure on the same graph they
+  partition.
 
 Out of scope: layout, directed CPM (CPM stays undirected, matching convention),
 overlapping communities, dynamic/streaming updates (possible later).
@@ -57,6 +61,10 @@ overlapping communities, dynamic/streaming updates (possible later).
 - An optional gonum adapter ships as a nested module
   (`github.com/andreswebs/meso/gonum`, its own go.mod) so the core never pulls
   gonum into consumers that do not want it.
+- Structure is readable back out (section 4.6): `Graph.Keys`, `NumEdges`,
+  `Degree`, `Neighbors`, `Weight`; `Result.NumCommunities`, `Members`,
+  `Cohesion`; the level hierarchy `Result.NumLevels`, `Level`,
+  `LevelQuality`; and the package functions `Betweenness` and `Subgraph`.
 
 Sketch:
 
@@ -66,8 +74,12 @@ g := meso.NewBuilder().
     AddEdge("b", "c", 2.0).
     Build()
 
-part, err := meso.Leiden(g, meso.WithQuality(meso.Modularity(1.0)), meso.WithSeed(42))
-// part.Communities(), part.Levels(), part.Quality()
+res, err := meso.Leiden(g, meso.WithQuality(meso.Modularity(1.0)), meso.WithSeed(42))
+// res.Communities(), res.Quality(), res.Members(0), res.Cohesion(0)
+// res.NumLevels(), res.Level(0), res.LevelQuality(0)
+
+bc := meso.Betweenness(g)
+sub, err := meso.Subgraph(g, res.Members(0))
 ```
 
 ## 4. Algorithms
@@ -152,6 +164,78 @@ Priorities: correctness and determinism first, then speed. Target: competitive
 with the Java reference and far faster than a naive implementation. We do not claim
 to beat the C++ `libleidenalg`.
 
+### 4.6 Structural measures
+
+Added in v0.2.0 so a consumer can build one meso graph and ask it for
+everything structural: one canonical CSR, one determinism discipline, one
+place where the float accumulation order is fixed. All of it is additive to
+the v0.1.0 API except the builder rule below.
+
+Builder rule. An edge or arc whose folded weight is zero is not stored: `Build`
+omits it from the adjacency, while its endpoints stay registered as nodes. A
+zero-weight self-loop is likewise absent. Every structural measure therefore
+reads "edge" as "entry in the adjacency", which always has positive weight.
+The optimisers are unaffected: a zero weight contributes no quality, and the
+connectivity check already followed only positive edges.
+
+Graph accessors:
+
+- `Keys()` returns the keys in dense index order (ascending under
+  `Canonical()`), as a copy.
+- `NumEdges()` counts distinct unordered pairs (undirected) or arcs (directed),
+  self-loops excluded.
+- `Degree(key)` and `Neighbors(key)` report distinct neighbours, self excluded,
+  in dense index order. On a directed graph a neighbour is joined by an arc in
+  either direction and counts once, so `len(Neighbors(k)) == Degree(k)` on
+  every graph.
+- `Weight(a, b)` reports the folded weight and whether the edge exists; on a
+  directed graph it follows the arc `a -> b`. `Weight(a, a)` reports a positive
+  self-loop.
+
+Result accessors: labels are dense in `[0, NumCommunities)`; `Members(label)`
+lists a community's keys in dense index order. `Cohesion(label)` is the
+internal density: distinct internal edges over `k(k-1)/2` for `k` members, or
+distinct internal arcs over `k(k-1)` on a directed graph (equal on a symmetric
+graph). Self-loops and weights are ignored; fewer than two members gives 0.
+Member lists are built once with the result, so a shared `Result` is safe for
+concurrent readers.
+
+`Subgraph(g, keys)` returns the graph induced by a key set: those nodes with
+their sizes and self-loops, every edge or arc between them with its folded
+weight, and `g`'s directedness. It is always canonically indexed, whatever
+`g`'s indexing, so a second Leiden pass over one community is a pure function
+of its members. Unknown and repeated keys are errors wrapping `ErrUnknownKey`
+and `ErrDuplicateKey`.
+
+Level hierarchy: `NumLevels()`, `Level(i)` and `LevelQuality(i)` report each
+level of the multilevel run, finest first, as caller-keyed dense labels and
+the level's quality under the run's objective; out of range gives nil and 0.
+The last level is the result and its quality is `Quality()`. A level is the
+base-graph partition reached after that level's local moving: Louvain's level
+partitions, and Leiden's non-refined phase-1 partition lifted to the base
+graph. Quality never decreases from one level to the next, for modularity, CPM
+and directed modularity alike. Louvain's levels nest, each a coarsening of the
+previous; Leiden's are not promised to, because from the second level on it
+aggregates the refined sub-communities, which a coarser level can divide
+differently. Under `WithIterations(k)` the levels are the final pass's. Levels
+are stored as dense partitions with their qualities, so a later
+`LevelResult(i) *Result` can expose a level as a full result without an API
+break; it is not provided yet.
+
+`Betweenness(g)` is Brandes' algorithm (Brandes, 2001) over unweighted shortest
+paths: every edge is one hop, and edge weights, node weights and self-loops are
+ignored. Undirected graphs count each unordered pair once and normalize by
+`(n-1)(n-2)/2`; directed graphs follow arcs and normalize by `(n-1)(n-2)`.
+Both reduce to dividing the raw ordered-pair dependency sum by `(n-1)(n-2)`.
+Values lie in `[0, 1]`; fewer than three nodes give zero. Determinism follows
+from the CSR: sources run in ascending dense index, neighbours in their sorted
+adjacency order, and dependencies accumulate in reverse BFS order, with no map
+iteration on the hot path, so the result is byte-identical for the same graph.
+Predecessors are recovered from the in-adjacency rather than stored, so the
+per-source loop does not allocate. A weighted (Dijkstra) variant and a
+parallel option are not provided; either would be an additive change with the
+unweighted serial form kept as the default.
+
 ## 5. Reference implementations and porting strategy
 
 Because meso is GPLv3 (section 9), we may study and port directly from GPL sources,
@@ -212,6 +296,13 @@ artifact the proofs reason about. See
   a float-rounding tolerance of those exact rationals. This covers quality (`Q`,
   CPM), the move-delta, and the invariant predicates. It does not cover directed
   modularity, which the Lean model deliberately descopes.
+- The structural measures of section 4.6 sit outside the Lean model and are
+  validated empirically, like the partition-comparison metrics: a definitional
+  brute-force oracle on random small graphs, closed forms (star, path, complete
+  graph, directed cycle), committed networkx references on the corpus
+  (`datasets/betweenness.py`, agreement to the last few bits), insertion-order
+  determinism, and fuzzing. The correspondence divergence register records the
+  gap.
 - Output correctness is checked against the proven invariants (every community
   connected, quality monotone across levels, subset-optimality at convergence),
   not against an empirical envelope. This is the actual Leiden specification, not
@@ -373,6 +464,10 @@ hot-path allocation; correctness and determinism prioritized over raw throughput
 7. Optional depth: formal verification tiers (section 7) - invariants, parallel
    confluence, and the paper theorems in Lean; data-race freedom of the parallel
    core in Gobra; TLA+ optional as a design bug-finder.
+8. Structural measures (v0.2.0, section 4.6): graph and result accessors,
+   cohesion, the canonical induced subgraph, and Brandes betweenness, on the Go
+   1.27 toolchain. Plan of record:
+   [specs/002-structural-measures/plan.md](specs/002-structural-measures/plan.md).
 
 ## 11. References
 
@@ -381,6 +476,8 @@ hot-path allocation; correctness and determinism prioritized over raw throughput
 - Blondel, V. D., Guillaume, J.-L., Lambiotte, R., Lefebvre, E. (2008). Fast
   unfolding of communities in large networks (Louvain).
 - Leicht, E. A., Newman, M. E. J. (2008). Community structure in directed networks.
+- Brandes, U. (2001). A faster algorithm for betweenness centrality. Journal of
+  Mathematical Sociology, 25(2), 163-177.
 - Lancichinetti, A., Fortunato, S., Radicchi, F. (2008). Benchmark graphs for
   testing community detection algorithms (LFR).
 - Zachary, W. W. (1977). An information flow model for conflict and fission in

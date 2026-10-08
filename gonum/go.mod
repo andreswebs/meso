@@ -4,7 +4,7 @@
 // not yet published under a release tag.
 module github.com/andreswebs/meso/gonum
 
-go 1.26.5
+go 1.27.1
 
 require (
 	github.com/andreswebs/meso v0.1.0

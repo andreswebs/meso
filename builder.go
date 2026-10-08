@@ -76,7 +76,9 @@ func (b *Builder) Canonical() *Builder {
 // from to -> from. A self-loop (from == to) is recorded as node-internal weight
 // rather than a neighbour entry. Both endpoints are registered as nodes.
 //
-// A negative or NaN weight is rejected: Build will return an error.
+// An edge whose folded weight is zero is not an edge: Build omits it from the
+// graph, leaving its endpoints as nodes (isolated, if nothing else connects
+// them). A negative or NaN weight is rejected: Build will return an error.
 func (b *Builder) AddEdge(from, to string, weight float64) *Builder {
 	if b.err != nil {
 		return b
@@ -161,6 +163,11 @@ func (b *Builder) Build() (*Graph, error) {
 		inLists = make([][]arc, n)
 	}
 	for pair, w := range b.edges {
+		// Weights are non-negative, so a zero total means every contribution was
+		// zero: there is no edge, only the endpoints AddEdge already registered.
+		if w == 0 {
+			continue
+		}
 		i, j := pos[pair[0]], pos[pair[1]]
 		outLists[i] = append(outLists[i], arc{dst: j, w: w})
 		if b.directed {

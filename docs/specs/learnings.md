@@ -1396,3 +1396,133 @@ kept for whoever picks up the next step.
   directed run cannot silently misread an undirected graph. celegans emits the
   two anchor partitions (all-in-one, singletons) only; no ground truth exists
   for it.
+
+## Spec 002: Go 1.27 toolchain and benchmark baseline (mes-rfgu)
+
+- The committed `benchmarks/baseline.txt` is recorded on linux/arm64 with
+  GOMAXPROCS 4, in Docker on the maintainer's machine, not on the host. Keep
+  regenerating it the same way so the benchmark names and machine profile stay
+  comparable:
+  `docker run --rm --cpus=4 -v "$PWD:/work" -w /work golang:<version>-bookworm go test -run='^$' -bench=. -benchmem -benchtime=10x -count=6 . > benchmarks/baseline.txt`.
+- A baseline compared across months reads slower from machine drift alone
+  (about 12% here). Attribute a change to the toolchain only with an
+  interleaved A/B: the old tree on the old image and the new tree on the new
+  image, run back to back. Go 1.26.5 to 1.27.1 showed no significant ns/op
+  change; planted-300 lost a few allocations with bit-identical output.
+
+## Spec 002: builder drops zero-weight edges (mes-dj0k)
+
+- `Build` now omits any edge or arc whose folded weight is zero; `AddEdge`
+  still registers both endpoints, so they survive as nodes.
+- The change is invisible to the optimisers. A zero weight adds nothing to
+  modularity or CPM, and `communityConnected` (the Lean `CommunityConnected`
+  image) already followed only positive-weight edges. What it fixes is the
+  structural view the v0.2.0 accessors and measures expose: without it a
+  zero-weight entry would count as an edge in `NumEdges`, `Degree`,
+  `Cohesion` and as a hop in `Betweenness`.
+- Consequence for tests: the zero-weight-bridge test passes with and without
+  the change, so it is an end-to-end guard, not a red-green proof. The
+  discriminating tests are the adjacency assertions in `builder_test.go`.
+
+## Spec 002: networkx betweenness references (mes-ar6b)
+
+- meso's `Betweenness` agrees with networkx 3.4.2 to the last few bits on the
+  corpus (worst 5.6e-17; lesmis bit-exact), because the accumulation uses
+  networkx's own form `sigma[v] * (1 + delta[w]) / sigma[w]`. The Go test holds
+  it to 1e-12, not the 1e-9 the plan allowed.
+- The commonly quoted karate values (node 34 "0.3040") are truncated, not
+  rounded: the true value is 0.30407. Compare quoted figures within one unit
+  in the last quoted place.
+- `celegansneural.gml` lists some arcs twice without declaring `multigraph 1`,
+  so `networkx.read_gml` refuses it. `datasets/betweenness.py` retries with the
+  header injected and collapses to a simple `DiGraph`, the same folding as
+  meso's builder (2359 GML edge blocks become 2345 arcs).
+- Typing a networkx script: pyright strict reads networkx's bundled stubs,
+  where `Graph` is generic, while ty reads the runtime package, where it is
+  not, so `nx.Graph[int]` satisfies one checker and fails the other. Follow
+  `datasets/lfr/generate.py`: hold the graph as `cast("Any", ...)` at the
+  library boundary, cast the values you read out to concrete types, and put a
+  targeted `# pyright: ignore[reportUnknownMemberType]` on the stub-gap calls.
+  The repo's Python scripts are not `ruff format`ted; formatting would also
+  split those calls away from their ignore comments.
+
+## Spec 002: benchmarks for the structural measures (mes-z1rf)
+
+- A new benchmark is invisible to the regression gate until two things change.
+  `make bench` only runs names matching `BENCH_RE` in the Makefile, and
+  `detectRegressions` iterates over the baseline's names, so a benchmark absent
+  from the baseline is never compared. Add the name to `BENCH_RE`, to the
+  `want` list in `TestBenchmarkBaselineValid` (which then fails red until the
+  baseline is regenerated), and regenerate the baseline.
+- `Betweenness` allocates a constant 9 to 11 times per call from karate up to
+  the 1000-node LFR graph, which is the allocs/op gate's real job here; its
+  ns/op is about 100 ms on the LFR graph, the costliest benchmark in the suite.
+
+## Spec 002: mutation gate (mes-5e63)
+
+- Run gremlins from a clean `git archive HEAD` export in a scratch directory,
+  with `TMPDIR` outside it: the export is about 10 MB against about 8 GB for a
+  working tree carrying `verification/lean/.lake`, so four workers cost about
+  110 MB of temp space and the full run takes about 30 minutes instead of
+  hours serially.
+- Result: 88.66% efficacy (383 killed, 49 lived, 15 timed out), above the 85
+  gate. Mutator coverage reads 54.89%, but 343 of the 355 uncovered mutants
+  are in `verification/reference/directed-scout/main.go`, a standalone
+  reference tool inside the module; without it coverage is about 97%.
+- Survivors in spec 002 code, all resolved:
+  - `centrality.go`, the `dist[v] >= 0` guard in the Brandes accumulation was
+    dead (w is never the source, so `dist[w]-1 >= 0` and an unreached v cannot
+    match); removed.
+  - `subgraph.go`, the `w > 0` guard before copying a self-loop was dead (a
+    zero self-loop folds to nothing); removed.
+  - `subgraph.go`, `j < i` flipped to `j <= i` or `j >= i` in the
+    lower-endpoint dedup: equivalent, since the adjacency never holds i itself
+    and taking each undirected edge from its higher endpoint is equally correct.
+- Coverage-tool artifact: gremlins reported the eight mutants on the `case`
+  conditions of `neighborIndices`' directed merge (`accessors.go`) as NOT
+  COVERED, because Go's coverage profile assigns `switch` case expressions to
+  no block. Applied by hand, the accessor tests kill all eight. Expect the same
+  for any `switch` with conditional cases.
+- The other survivors are in spec 001 code and already classified above (sort
+  comparators, `edgeKey`, epsilon boundaries).
+- `TestBuilder_ZeroWeightsAccepted`, cited above as the killer of the
+  `>=`-to-`>` weight-guard mutant, was replaced by
+  `TestBuilder_ZeroWeightEdgeDropped` in mes-dj0k; it still builds a zero
+  weight without error, so it still kills that mutant (the run shows it
+  killed).
+
+## Spec 002: level hierarchy on Result (mes-rogj)
+
+- Production now records levels: `leidenLevelsWith` (the former `leidenWith`
+  body, appending one base partition per loop iteration) and
+  `leidenIteratedLevels` (final pass only); `leidenWith` is a thin wrapper kept
+  for the internal tests, and the old `leidenIterated` was removed once
+  `Leiden` stopped calling it. Louvain reuses `louvainTraceWith`. `newRunResult`
+  computes each level's quality once (one O(m) evaluation per level).
+- The test-only `leidenTrace` was kept by owner ruling; `TestLeiden_TraceMatchesRun`
+  now pins every level of it to `leidenLevelsWith`, not just the last.
+- Directed modularity's level monotonicity is now asserted for the first time
+  (celegansneural, Leiden and Louvain) and holds.
+- Louvain's last level always repeats the one before it whenever more than one
+  level exists: the final pass is the one whose local move merges nothing. The
+  `ExampleResult_Level` output shows it; it is not a bug.
+- To make a "final pass only" test discriminate from "all passes
+  concatenated", compare the final pass's first level against the (k-1)-pass
+  result: on lesmis seed 9 the first pass starts at 0.547 and ends at 0.566, so
+  a concatenated history would start below the earlier result.
+
+## Spec 002: mutation target on a clean export (mes-ctmy)
+
+- `make mutation` now exports `HEAD` with `git archive` into a fresh
+  `mktemp -d` directory, runs gremlins there with its `TMPDIR` in a sibling
+  directory, removes everything on exit (a `trap`), and warns when tracked Go
+  files have uncommitted changes, since those are not mutated.
+- gremlins v0.6.0's `-E/--exclude-files` is a repeatable string array, so
+  `-E 'gonum/' -E 'verification/'` works; the run output carries no
+  `verification/` path.
+- Confirmation run at `031452b` (levels included), 4 workers: 32m07s, peak
+  working area 126 MB, efficacy 89.34% (394 killed, 47 lived, 16 timed out),
+  mutator coverage 97.35%. The level-hierarchy code has no survivors. The 12
+  NOT COVERED are the 8 `switch`-case artifacts in `accessors.go` (killed by
+  hand, see mes-5e63) and 4 spec 001 lines. `go.mod` byte-identical after the
+  run.

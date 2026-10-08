@@ -1,9 +1,30 @@
 # meso
 
-`meso` is a pure-Go, deterministic community-detection library. It recovers the
-mesoscale structure of a weighted graph, the level between individual nodes and
-the whole network, using the Leiden algorithm (Traag, Waltman, van Eck, 2019)
-with Louvain as its baseline.
+`meso` is a pure-Go, deterministic library for the mesoscale structure of a
+weighted graph, the level between individual nodes and the whole network. It
+detects communities with the Leiden algorithm (Traag, Waltman, van Eck, 2019),
+with Louvain as its baseline, reports the multilevel hierarchy of each run,
+and measures the structure around the communities: node betweenness
+centrality, community cohesion, and canonical induced subgraphs.
+
+```go
+g, err := meso.NewBuilder().Canonical().
+    AddEdge("a", "b", 1).AddEdge("b", "c", 1).AddEdge("c", "a", 1).
+    AddEdge("c", "x", 1).AddEdge("x", "y", 1).
+    Build()
+
+res, err := meso.Leiden(g, meso.WithSeed(42))
+for l := range res.NumCommunities() {
+    fmt.Println(res.Members(l), res.Cohesion(l))
+}
+
+for l := range res.NumLevels() {               // the multilevel hierarchy
+    fmt.Println(l, res.Level(l), res.LevelQuality(l))
+}
+
+bc := meso.Betweenness(g)                       // normalized to [0, 1]
+sub, err := meso.Subgraph(g, res.Members(0))   // canonical, re-runnable
+```
 
 See [docs/meso-design.md](docs/meso-design.md) for the design of record.
 
@@ -13,6 +34,8 @@ See [docs/meso-design.md](docs/meso-design.md) for the design of record.
   and a shared quality-function core.
 - Bit-reproducible output for a given input, seed, and parameters, including
   under parallelism.
+- Structural measures on the same graph that is partitioned, so consumers
+  never maintain a second adjacency to analyse it.
 - Idiomatic, dependency-free public API with an optional gonum adapter.
 
 ## Modules

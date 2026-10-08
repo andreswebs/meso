@@ -1,7 +1,9 @@
 package meso
 
 import (
+	"os"
 	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -112,4 +114,75 @@ func BenchmarkLouvain(b *testing.B) {
 			}
 		})
 	}
+}
+
+// loadLFREdgeList builds the undirected graph of a committed LFR edge list
+// (datasets/lfr: "u v" lines, "#" comments), canonically indexed. The richer
+// LFR loader lives in the external test package and is not reachable here.
+func loadLFREdgeList(tb testing.TB, path string) *Graph {
+	tb.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		tb.Fatalf("read %s: %v", path, err)
+	}
+	b := NewBuilder().Canonical()
+	for line := range strings.SplitSeq(string(data), "\n") {
+		f := strings.Fields(line)
+		if len(f) == 0 || strings.HasPrefix(f[0], "#") {
+			continue
+		}
+		if len(f) != 2 {
+			tb.Fatalf("%s: malformed line %q", path, line)
+		}
+		b.AddEdge(f[0], f[1], 1)
+	}
+	g, err := b.Build()
+	if err != nil {
+		tb.Fatalf("build %s: %v", path, err)
+	}
+	return g
+}
+
+// BenchmarkBetweenness measures Betweenness from a corpus graph up to a
+// 1000-node LFR graph, where its O(nm) cost dominates.
+func BenchmarkBetweenness(b *testing.B) {
+	for _, g := range []benchGraph{
+		{"karate", loadGMLGraph(b, "datasets/karate/karate.gml")},
+		{"lesmis", loadGMLGraph(b, "datasets/lesmis/lesmis.gml")},
+		{"lfr-S-mu030", loadLFREdgeList(b, "datasets/lfr/S/mu030-r0.txt")},
+	} {
+		b.Run(g.name, func(b *testing.B) {
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				Betweenness(g.graph)
+			}
+		})
+	}
+}
+
+// BenchmarkSubgraph measures extracting the largest Leiden community of karate,
+// the re-split step a consumer runs before a second Leiden pass.
+func BenchmarkSubgraph(b *testing.B) {
+	g := loadGMLGraph(b, "datasets/karate/karate.gml")
+	res, err := Leiden(g, WithSeed(1))
+	if err != nil {
+		b.Fatal(err)
+	}
+	largest := 0
+	for l := range res.NumCommunities() {
+		if len(res.Members(l)) > len(res.Members(largest)) {
+			largest = l
+		}
+	}
+	members := res.Members(largest)
+	b.Run("karate-largest", func(b *testing.B) {
+		b.ReportAllocs()
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			if _, err := Subgraph(g, members); err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
 }

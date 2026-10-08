@@ -7,8 +7,12 @@
 # below the threshold. Every other run setting (workers, timeout coefficient,
 # excluded files) is passed as a flag by the Makefile target.
 #
-# The core scores 89.04% efficacy (390 killed / 438 killed+survived). Survivors
-# are triaged in docs/specs/learnings.md: real coverage gaps got a test back in
+# The core scored 89.04% efficacy (390 killed / 438 killed+survived) at spec
+# 001, 88.66% (383 / 432) after spec 002 added the structural measures, and
+# 89.34% (394 / 441, mutator coverage 97.35%) once the level hierarchy landed,
+# the two dead guards were removed and `make mutation` stopped mutating
+# verification/. Survivors are
+# triaged in docs/specs/learnings.md: real coverage gaps got a test back in
 # the owning file, the rest are documented equivalent mutants (epsilon boundaries
 # never hit exactly, order-invariant sort comparators, error-message-only
 # arithmetic, validator boundaries unreachable for valid graphs, and the

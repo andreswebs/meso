@@ -137,6 +137,40 @@ type Result struct {
 	g       *Graph
 	part    Partition
 	quality float64
+	members [][]int
+
+	levels       []Partition
+	levelQuality []float64
+}
+
+// newResult wraps a dense partition of g. The per-label member lists are built
+// here, once, so every accessor is a read and a Result is safe to share
+// between goroutines.
+func newResult(g *Graph, p Partition, quality float64) *Result {
+	k := 0
+	for _, c := range p {
+		k = max(k, c+1)
+	}
+	members := make([][]int, k)
+	for i, c := range p {
+		members[c] = append(members[c], i)
+	}
+	return &Result{g: g, part: p, quality: quality, members: members}
+}
+
+// newRunResult wraps the level partitions of a run, coarsest last: the last
+// level is the result. Each level keeps its quality under obj, so a level can
+// later be reported as a Result of its own.
+func newRunResult(g *Graph, obj objective, levels []Partition) *Result {
+	qualities := make([]float64, len(levels))
+	for i, p := range levels {
+		qualities[i] = obj.Quality(g.model, p)
+	}
+	last := len(levels) - 1
+	r := newResult(g, levels[last], qualities[last])
+	r.levels = levels
+	r.levelQuality = qualities
+	return r
 }
 
 // Communities returns the community label of every node, keyed by the caller's
@@ -176,8 +210,7 @@ func Leiden(g *Graph, opts ...Option) (*Result, error) {
 	if cfg.parallel {
 		mv = parallelMover(cfg.workers)
 	}
-	p := leidenIterated(g.model, obj, cfg.seed, cfg.iterations, mv)
-	return &Result{g: g, part: p, quality: obj.Quality(g.model, p)}, nil
+	return newRunResult(g, obj, leidenIteratedLevels(g.model, obj, cfg.seed, cfg.iterations, mv)), nil
 }
 
 // Louvain runs the Louvain algorithm (local moving plus aggregation, no
@@ -197,11 +230,14 @@ func Louvain(g *Graph, opts ...Option) (*Result, error) {
 		return nil, err
 	}
 
-	var p Partition
+	mv := serialLouvainMover
 	if cfg.parallel {
-		p = louvainParallel(g.model, obj, cfg.workers)
-	} else {
-		p = louvain(g.model, obj)
+		mv = parallelMover(cfg.workers)
 	}
-	return &Result{g: g, part: p, quality: obj.Quality(g.model, p)}, nil
+	trace := louvainTraceWith(g.model, obj, mv)
+	levels := make([]Partition, len(trace))
+	for i, lv := range trace {
+		levels[i] = lv.base
+	}
+	return newRunResult(g, obj, levels), nil
 }

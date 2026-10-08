@@ -134,6 +134,16 @@ bugs; listing them keeps known gaps from masquerading as coverage.
   tolerance of it. This is the numeric oracle of record; the cross-language
   differential harness is retired (decided 2026-07-16, TODO Phase F1/F2 done; see
   [../../docs/specs/001-initial-implementation/meso-oracle.md](../../docs/specs/001-initial-implementation/meso-oracle.md)).
+- The v0.2.0 structural measures are outside the model: the `Graph` accessors
+  (`Keys`, `NumEdges`, `Degree`, `Neighbors`, `Weight`), the `Result` accessors
+  and `Cohesion`, `Subgraph`, and `Betweenness`. No theorem, mirror or golden
+  vector covers them. They are validated empirically instead: a definitional
+  brute-force oracle on random small graphs, closed forms, committed networkx
+  references on the corpus, insertion-order determinism, and fuzzing (design
+  section 4.6 and 6.2). Their one contact with the model is the builder rule
+  that drops zero-weight edges: the model's `weight i j = 0` already means "no
+  edge" for connectivity (`CommunityConnected` follows only positive weights),
+  so the rule changes no modelled quantity.
 - The model assumes symmetry, nonnegative weights, and nonnegative node sizes as
   structure. Go validates them at `Build()` and returns an error; the malformed
   inputs the model never sees are Go's responsibility.

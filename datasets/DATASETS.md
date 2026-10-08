@@ -49,6 +49,23 @@ verification phase 5, epic `mes-crz3`).
   partition; used as a modularity/CPM target, not for NMI/ARI.
 - **football / polbooks:** ground truth is the in-file `value` attribute.
 
+## Betweenness references
+
+`karate`, `dolphins`, `lesmis` and `celegansneural` each carry a
+`betweenness.csv`: one `key,betweenness` row per node, the key being the GML
+node `id`, the value networkx's `betweenness_centrality(G, normalized=True)`
+over unweighted shortest paths at full float precision. They are the external
+reference for meso's `Betweenness`, which matches them to within a few units in
+the last place.
+
+- Generator: `betweenness.py`, a self-contained `uv` script pinning networkx
+  3.4.2. It reads each GML by node id, collapses duplicate edges (celegansneural
+  lists some arcs twice) and drops self-loops, matching how meso's builder folds
+  them. Reproduce, from the repository root, with
+  `uv run datasets/betweenness.py`.
+- Regenerate only when a corpus GML or the pinned networkx version changes; the
+  Go test fails if a CSV's key set drifts from its graph.
+
 ## LFR synthetic benchmarks
 
 LFR benchmark graphs (Lancichinetti-Fortunato-Radicchi): synthetic graphs with

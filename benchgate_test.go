@@ -257,7 +257,8 @@ func TestDetectRegressions(t *testing.T) {
 }
 
 // TestBenchmarkBaselineValid guards the committed baseline (acceptance criterion
-// 2): it must parse, cover both algorithms across the small-to-large tier, and
+// 2): it must parse, cover both algorithms across the small-to-large tier and
+// the structural measures (mes-z1rf), and
 // carry non-zero ns/op and allocs/op for every sample. A truncated or malformed
 // baseline fails here under `make validate`, before the gate ever compares
 // against it.
@@ -268,6 +269,8 @@ func TestBenchmarkBaselineValid(t *testing.T) {
 		"BenchmarkLeiden/karate", "BenchmarkLouvain/karate",
 		"BenchmarkLeiden/planted-300", "BenchmarkLouvain/planted-300",
 		"BenchmarkLeiden/planted-800", "BenchmarkLouvain/planted-800",
+		"BenchmarkBetweenness/karate", "BenchmarkBetweenness/lesmis", "BenchmarkBetweenness/lfr-S-mu030",
+		"BenchmarkSubgraph/karate-largest",
 	}
 	for _, name := range want {
 		samples, ok := got[name]
