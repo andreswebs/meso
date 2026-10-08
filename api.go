@@ -137,6 +137,22 @@ type Result struct {
 	g       *Graph
 	part    Partition
 	quality float64
+	members [][]int
+}
+
+// newResult wraps a dense partition of g. The per-label member lists are built
+// here, once, so every accessor is a read and a Result is safe to share
+// between goroutines.
+func newResult(g *Graph, p Partition, quality float64) *Result {
+	k := 0
+	for _, c := range p {
+		k = max(k, c+1)
+	}
+	members := make([][]int, k)
+	for i, c := range p {
+		members[c] = append(members[c], i)
+	}
+	return &Result{g: g, part: p, quality: quality, members: members}
 }
 
 // Communities returns the community label of every node, keyed by the caller's
@@ -177,7 +193,7 @@ func Leiden(g *Graph, opts ...Option) (*Result, error) {
 		mv = parallelMover(cfg.workers)
 	}
 	p := leidenIterated(g.model, obj, cfg.seed, cfg.iterations, mv)
-	return &Result{g: g, part: p, quality: obj.Quality(g.model, p)}, nil
+	return newResult(g, p, obj.Quality(g.model, p)), nil
 }
 
 // Louvain runs the Louvain algorithm (local moving plus aggregation, no
@@ -203,5 +219,5 @@ func Louvain(g *Graph, opts ...Option) (*Result, error) {
 	} else {
 		p = louvain(g.model, obj)
 	}
-	return &Result{g: g, part: p, quality: obj.Quality(g.model, p)}, nil
+	return newResult(g, p, obj.Quality(g.model, p)), nil
 }

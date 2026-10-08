@@ -1,6 +1,6 @@
 ---
 id: mes-8x09
-status: open
+status: closed
 deps: [mes-ojdd]
 links: []
 created: 2026-10-07T16:34:15Z
@@ -41,3 +41,13 @@ func (r *Result) Cohesion(label int) float64
 ## Acceptance Criteria
 
 TDD order. 1) `NumCommunities()` equals the distinct-label count of `Communities()` on every corpus result. 2) `Members` over all labels partitions `Keys()` exactly, each list in dense order; out-of-range gives nil. 3) `Cohesion` closed forms: clique 1, no internal edges 0, singleton 0, 4 members with 3 internal edges 0.5, directed form on a symmetric graph equals undirected, a lone arc in a 2-member directed community gives 0.5. 4) Weight-invariant: unit and random weights give identical cohesion. 5) Self-loop-invariant. 6) Brute force on small random graphs and partitions matches a direct pair count. 7) A concurrent-readers test under `make test-race`. `make validate` green in both modules (fmt-check, vet, lint, test).
+
+## Notes
+
+**2026-10-08T01:53:00Z**
+
+Done. `Result` (api.go) gains a `members [][]int` field built eagerly by the new `newResult(g, p, quality)` constructor, which `Leiden` and `Louvain` now use. Eager construction (one O(n) pass, negligible next to the run) was chosen over a lazy cache so a shared `*Result` needs no `sync.Once` and stays race-free.
+
+New result_accessors.go: `NumCommunities()` (len of members), `Members(label)` (keys in dense order, copied; nil out of range), `Cohesion(label)` (count out-adjacency entries of members whose target shares the label, divide by k(k-1); undirected edges appear in both lists so the doubled count matches k(k-1) = 2 * k(k-1)/2; directed arcs appear once against k(k-1) ordered pairs; 0 for k < 2 or unknown label).
+
+Tests in result_accessors_test.go: Members partition Keys() in dense order on the five undirected corpus graphs; out-of-range and copy semantics; Cohesion closed forms (clique 1, path of 4 = 0.5, 0, singleton, directed symmetric = 2/3, lone arc 0.5, unknown labels); brute force over 200 random undirected/directed graphs and partitions; weight and self-loop invariance; 8 concurrent readers under -race. Fixture helpers `resultFor(t, g, labels)` and `randomCohesionFixture` are reusable by mes-6mfk. Gotcha hit: a fixture whose weight function consumes PRNG draws changes the topology between variants; the fixture now always takes the draw. `make validate` green.
