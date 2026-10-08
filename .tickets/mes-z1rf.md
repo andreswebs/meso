@@ -8,7 +8,7 @@ type: task
 priority: 3
 assignee: Andre Silva
 parent: mes-0jzi
-tags: [bench, step-7]
+tags: [bench, step-7, implementation]
 ---
 # Benchmarks for `Betweenness` and `Subgraph`, baseline regenerated
 

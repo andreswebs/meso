@@ -8,7 +8,7 @@ type: task
 priority: 2
 assignee: Andre Silva
 parent: mes-0jzi
-tags: [docs, step-8]
+tags: [docs, step-8, implementation]
 ---
 # Design of record, package docs, and correspondence divergence entry for structural measures
 

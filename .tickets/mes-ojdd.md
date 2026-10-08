@@ -8,7 +8,7 @@ type: feature
 priority: 1
 assignee: Andre Silva
 parent: mes-0jzi
-tags: [api, accessors, step-2]
+tags: [api, accessors, step-2, implementation]
 ---
 # Graph accessors: `Keys`, `NumEdges`, `Degree`, `Neighbors`, `Weight`
 

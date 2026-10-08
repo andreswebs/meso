@@ -8,7 +8,7 @@ type: feature
 priority: 1
 assignee: Andre Silva
 parent: mes-0jzi
-tags: [centrality, step-5]
+tags: [centrality, step-5, implementation]
 ---
 # `Betweenness`: Brandes over unweighted shortest paths, undirected and directed
 

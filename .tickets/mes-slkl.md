@@ -8,7 +8,7 @@ type: task
 priority: 2
 assignee: Andre Silva
 parent: mes-0jzi
-tags: [fuzz, step-7]
+tags: [fuzz, step-7, implementation]
 ---
 # Fuzz targets `FuzzBetweenness` and `FuzzSubgraph`
 

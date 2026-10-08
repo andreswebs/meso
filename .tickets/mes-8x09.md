@@ -8,7 +8,7 @@ type: feature
 priority: 1
 assignee: Andre Silva
 parent: mes-0jzi
-tags: [api, cohesion, step-3]
+tags: [api, cohesion, step-3, implementation]
 ---
 # Result accessors and `Cohesion`: `NumCommunities`, `Members`, `Cohesion`
 

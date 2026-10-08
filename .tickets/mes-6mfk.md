@@ -8,7 +8,7 @@ type: feature
 priority: 1
 assignee: Andre Silva
 parent: mes-0jzi
-tags: [api, subgraph, step-4]
+tags: [api, subgraph, step-4, implementation]
 ---
 # `Subgraph`: canonical induced subgraph with `ErrUnknownKey` and `ErrDuplicateKey`
 

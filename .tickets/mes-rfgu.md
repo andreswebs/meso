@@ -1,6 +1,6 @@
 ---
 id: mes-rfgu
-status: open
+status: closed
 deps: []
 links: []
 created: 2026-10-07T16:34:15Z
@@ -8,7 +8,7 @@ type: chore
 priority: 1
 assignee: Andre Silva
 parent: mes-0jzi
-tags: [toolchain, step-0]
+tags: [toolchain, step-0, implementation]
 ---
 # Go 1.27 toolchain in both modules, CI golangci-lint bump, baseline regen
 
@@ -39,3 +39,15 @@ Step 0 of `docs/specs/002-structural-measures/plan.md`, parent mes-0jzi. Move bo
 ## Acceptance Criteria
 
 1) Both `go.mod` files declare Go 1.27.x. 2) `make validate` and `make test-race` green in both modules. 3) `make bench-check` green against the regenerated baseline. 4) `make vulncheck` green. 5) CI workflows pin a golangci-lint built with Go 1.27. The close note records the exact lint version chosen and any `go fix` rewrites kept.
+
+## Notes
+
+**2026-10-08T01:38:04Z**
+
+Done. Both `go.mod` files now declare `go 1.27.1`. `go fix ./...` made no rewrites in either module; `make tidy` changed nothing. CI and release workflows pin golangci-lint `v2.14.0` (latest, built with Go 1.27.1); the action SHA was already the latest v9.3.0 and is unchanged. Lint: 0 issues in both modules.
+
+Gates: `make validate`, `make test-race`, `make vulncheck` green in both modules; `make bench-check` green against both the old and the regenerated baseline.
+
+Baseline: the committed `benchmarks/baseline.txt` was recorded on linux/arm64 with GOMAXPROCS 4 (not documented anywhere; Docker on the maintainer's Mac reports exactly 4 CPUs linux/aarch64). Regenerated it the same way: `docker run --rm --cpus=4 -v "$PWD:/work" -w /work golang:1.27.1-bookworm go test -run='^$' -bench=. -benchmem -benchtime=10x -count=6 . > benchmarks/baseline.txt`. Same 10 benchmarks x 6 samples as before. Record this procedure in the docs if the baseline machine matters (mes-z1rf regenerates again and should use the same command).
+
+Toolchain effect, measured with an interleaved A/B in that container (HEAD on golang:1.26.5 vs this tree on golang:1.27.1): no significant ns/op change on any benchmark (geomean -1.5%). Against the old committed baseline the new one reads ~12% slower, which the A/B shows is machine drift since the original recording, not Go 1.27. allocs/op identical except planted-300: Leiden 6728 -> 6719, Louvain 4734 -> 4707. Reproduced under go1.26.5 vs go1.27.1 on darwin, so it is the toolchain; partitions and Quality() bits are identical under both toolchains on planted-300 and planted-800, so it is a pure compiler/runtime gain. B/op +16 bytes on most benchmarks, constant.
