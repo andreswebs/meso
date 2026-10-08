@@ -1,0 +1,39 @@
+---
+name: Bench baseline
+
+# Records benchmarks/baseline.txt on the same runner type the CI regression
+# gate runs on, so the gate compares like with like. Trigger it by hand after a
+# change that legitimately moves the numbers, download the artifact, and commit
+# the file:
+#
+#   gh workflow run bench-baseline.yml --ref "${BRANCH}"
+#   gh run download "${RUN_ID}" -n bench-baseline -D benchmarks
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  baseline:
+    name: baseline
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - name: Record baseline
+        run: make bench-baseline
+
+      - name: Upload baseline
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: bench-baseline
+          path: benchmarks/baseline.txt
+          if-no-files-found: error

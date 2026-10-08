@@ -37,3 +37,7 @@ Done. `make mutation` (gremlins v0.6.0, threshold 85 unchanged) run from a clean
 Result: efficacy 88.66% (383 killed / 432 killed+lived; 15 timed out; spec 001 was 89.04%). Mutator coverage 54.89% is misleading: 343 of 355 NOT COVERED are in verification/reference/directed-scout/main.go (a reference tool inside the module); excluding it coverage is ~97%. Raised for discussion, Makefile unchanged.
 
 Spec 002 survivors: two dead guards removed (centrality.go `dist[v] >= 0` in the accumulation; subgraph.go `w > 0` before copying a self-loop), the remaining subgraph.go dedup flips are equivalent (documented). The eight accessors.go NOT COVERED mutants sit on `switch` case conditions, which Go's coverage profile assigns to no block; applied by hand, all eight are killed by the accessor tests. Other survivors are spec 001 code already classified. `.gremlins.yaml` score comment updated; full triage in docs/specs/learnings.md. Not re-run after removing the guards (30 min); the removal only drops two equivalent mutants. `make validate` green.
+
+**2026-10-08T05:28:20Z**
+
+Post-close correction (2026-10-08): removing the Subgraph self-loop guard was a mistake. It never changed results, but it added a builder map entry per member, +4 allocs/op on BenchmarkSubgraph, which failed the CI allocation gate. The guard is restored with a comment explaining why it stays; its boundary mutant is equivalent in behaviour and stays documented as such.
