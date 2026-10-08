@@ -70,8 +70,10 @@ func brandes(m *csr, bc []float64) {
 		for k := len(order) - 1; k > 0; k-- {
 			w := order[k]
 			coeff := (1 + delta[w]) / sigma[w]
+			// w is never the source, so dist[w]-1 >= 0 and an unreached v
+			// (dist -1) cannot match.
 			for _, v := range m.inNeighbors(w) {
-				if dist[v] >= 0 && dist[v] == dist[w]-1 {
+				if dist[v] == dist[w]-1 {
 					delta[v] += sigma[v] * coeff
 				}
 			}

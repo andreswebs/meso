@@ -38,9 +38,8 @@ func Subgraph(g *Graph, keys []string) (*Graph, error) {
 	for _, k := range keys {
 		i := g.index[k]
 		b.AddNodeWeight(k, m.nodeSize(i))
-		if w := m.selfLoops[i]; w > 0 {
-			b.AddEdge(k, k, w)
-		}
+		// A zero self-loop folds to nothing, so it needs no guard.
+		b.AddEdge(k, k, m.selfLoops[i])
 		for n, j := range m.neighbors(i) {
 			// An undirected edge appears in both endpoints' lists and AddEdge
 			// would fold it twice; take it once, from its lower endpoint.

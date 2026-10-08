@@ -1457,3 +1457,36 @@ kept for whoever picks up the next step.
 - `Betweenness` allocates a constant 9 to 11 times per call from karate up to
   the 1000-node LFR graph, which is the allocs/op gate's real job here; its
   ns/op is about 100 ms on the LFR graph, the costliest benchmark in the suite.
+
+## Spec 002: mutation gate (mes-5e63)
+
+- Run gremlins from a clean `git archive HEAD` export in a scratch directory,
+  with `TMPDIR` outside it: the export is about 10 MB against about 8 GB for a
+  working tree carrying `verification/lean/.lake`, so four workers cost about
+  110 MB of temp space and the full run takes about 30 minutes instead of
+  hours serially.
+- Result: 88.66% efficacy (383 killed, 49 lived, 15 timed out), above the 85
+  gate. Mutator coverage reads 54.89%, but 343 of the 355 uncovered mutants
+  are in `verification/reference/directed-scout/main.go`, a standalone
+  reference tool inside the module; without it coverage is about 97%.
+- Survivors in spec 002 code, all resolved:
+  - `centrality.go`, the `dist[v] >= 0` guard in the Brandes accumulation was
+    dead (w is never the source, so `dist[w]-1 >= 0` and an unreached v cannot
+    match); removed.
+  - `subgraph.go`, the `w > 0` guard before copying a self-loop was dead (a
+    zero self-loop folds to nothing); removed.
+  - `subgraph.go`, `j < i` flipped to `j <= i` or `j >= i` in the
+    lower-endpoint dedup: equivalent, since the adjacency never holds i itself
+    and taking each undirected edge from its higher endpoint is equally correct.
+- Coverage-tool artifact: gremlins reported the eight mutants on the `case`
+  conditions of `neighborIndices`' directed merge (`accessors.go`) as NOT
+  COVERED, because Go's coverage profile assigns `switch` case expressions to
+  no block. Applied by hand, the accessor tests kill all eight. Expect the same
+  for any `switch` with conditional cases.
+- The other survivors are in spec 001 code and already classified above (sort
+  comparators, `edgeKey`, epsilon boundaries).
+- `TestBuilder_ZeroWeightsAccepted`, cited above as the killer of the
+  `>=`-to-`>` weight-guard mutant, was replaced by
+  `TestBuilder_ZeroWeightEdgeDropped` in mes-dj0k; it still builds a zero
+  weight without error, so it still kills that mutant (the run shows it
+  killed).

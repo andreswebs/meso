@@ -1,6 +1,6 @@
 ---
 id: mes-5e63
-status: open
+status: closed
 deps: [mes-ojdd, mes-8x09, mes-6mfk, mes-ar6b, mes-slkl]
 links: []
 created: 2026-10-07T16:34:16Z
@@ -27,3 +27,13 @@ Step 7 (mutation part) of `docs/specs/002-structural-measures/plan.md`, parent m
 ## Acceptance Criteria
 
 `make mutation` passes the committed threshold; every survivor in spec 002 files is either killed or triaged in `docs/specs/learnings.md`; the close note records the new efficacy and counts. `markdownlint-cli2` clean on `learnings.md`. `make validate` green in both modules (fmt-check, vet, lint, test).
+
+## Notes
+
+**2026-10-08T03:02:33Z**
+
+Done. `make mutation` (gremlins v0.6.0, threshold 85 unchanged) run from a clean `git archive HEAD` export in a scratch dir with MUTATION_WORKERS=4 and TMPDIR outside it, to keep the footprint small (~10 MB tree, ~110 MB temp, vs ~8 GB per copy with verification/lean/.lake): 30m53s, exit 0.
+
+Result: efficacy 88.66% (383 killed / 432 killed+lived; 15 timed out; spec 001 was 89.04%). Mutator coverage 54.89% is misleading: 343 of 355 NOT COVERED are in verification/reference/directed-scout/main.go (a reference tool inside the module); excluding it coverage is ~97%. Raised for discussion, Makefile unchanged.
+
+Spec 002 survivors: two dead guards removed (centrality.go `dist[v] >= 0` in the accumulation; subgraph.go `w > 0` before copying a self-loop), the remaining subgraph.go dedup flips are equivalent (documented). The eight accessors.go NOT COVERED mutants sit on `switch` case conditions, which Go's coverage profile assigns to no block; applied by hand, all eight are killed by the accessor tests. Other survivors are spec 001 code already classified. `.gremlins.yaml` score comment updated; full triage in docs/specs/learnings.md. Not re-run after removing the guards (30 min); the removal only drops two equivalent mutants. `make validate` green.
