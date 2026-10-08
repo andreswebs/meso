@@ -1445,3 +1445,15 @@ kept for whoever picks up the next step.
   targeted `# pyright: ignore[reportUnknownMemberType]` on the stub-gap calls.
   The repo's Python scripts are not `ruff format`ted; formatting would also
   split those calls away from their ignore comments.
+
+## Spec 002: benchmarks for the structural measures (mes-z1rf)
+
+- A new benchmark is invisible to the regression gate until two things change.
+  `make bench` only runs names matching `BENCH_RE` in the Makefile, and
+  `detectRegressions` iterates over the baseline's names, so a benchmark absent
+  from the baseline is never compared. Add the name to `BENCH_RE`, to the
+  `want` list in `TestBenchmarkBaselineValid` (which then fails red until the
+  baseline is regenerated), and regenerate the baseline.
+- `Betweenness` allocates a constant 9 to 11 times per call from karate up to
+  the 1000-node LFR graph, which is the allocs/op gate's real job here; its
+  ns/op is about 100 ms on the LFR graph, the costliest benchmark in the suite.

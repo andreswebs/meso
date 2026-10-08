@@ -24,7 +24,7 @@ FUZZTIME     ?= 30s
 # bench-check` compares a fresh run against the committed baseline and fails on a
 # regression (ns/op beyond tolerance or any allocs/op growth). `make validate`
 # does not run them - it runs only the deterministic gate self-test.
-BENCH_RE    := ^BenchmarkLeiden$$|^BenchmarkLouvain$$
+BENCH_RE    := ^BenchmarkLeiden$$|^BenchmarkLouvain$$|^BenchmarkBetweenness$$|^BenchmarkSubgraph$$
 BENCHTIME   ?= 10x
 BENCHCOUNT  ?= 6
 BASELINE    := benchmarks/baseline.txt
