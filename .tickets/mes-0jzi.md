@@ -24,6 +24,8 @@ Umbrella for meso v0.2.0, the structural-measures release: node betweenness, com
 7. mes-ar6b - step 6: networkx reference CSVs.
 8. mes-z1rf, mes-slkl, mes-5e63 - step 7 split three ways: benchmarks, fuzz, mutation.
 9. mes-2ppe - step 8: design doc, package docs, correspondence divergence entry.
+10. mes-rogj - step 9: level hierarchy on `Result` (`NumLevels`, `Level`, `LevelQuality`), added 2026-10-08 with the plan owner, blocks the tag.
+11. mes-ctmy - step 10: `make mutation` on a clean `git archive` export, excluding `verification/`, 4 workers; after mes-rogj so its run covers the level code.
 
 The dependency edges are the real ordering. `Betweenness` (mes-i21e) depends only on the builder change, so it can run in parallel with the accessor chain (mes-ojdd -> mes-8x09 -> mes-6mfk).
 

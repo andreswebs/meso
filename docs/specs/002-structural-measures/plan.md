@@ -43,6 +43,9 @@ its own edge set. Everything is additive; v0.1.0 callers keep compiling.
 - Release engineering is out of scope. The plan ends feature-complete and
   documented; tagging `v0.2.0` and `gonum/v0.2.0` follows as a separate
   user-driven checklist (see exit criteria).
+- The level hierarchy (Step 9) and the mutation-target changes (Step 10)
+  were added on 2026-10-08, after steps 0 to 8 had landed, and decided with
+  the plan owner: both block the `v0.2.0` tag.
 - Every step ends with `make validate` green before moving on.
 
 ## Pinned semantics
@@ -100,6 +103,31 @@ Subgraph:
 - An unknown key is an error wrapping `ErrUnknownKey`; a key listed twice is
   an error wrapping `ErrDuplicateKey`. Both carry the offending key in the
   message. An empty key list yields an empty graph, not an error.
+
+Level hierarchy (Step 9):
+
+- `NumLevels()` returns the number of levels of the run; `Level(i)` returns
+  level `i`'s community label per caller key, labels dense, nil for `i`
+  outside `[0, NumLevels)`; `LevelQuality(i)` returns that level's quality
+  under the run's objective (0 out of range, documented). The last level
+  equals `Communities()` and its quality equals `Quality()`.
+- A level is the base-graph partition the run reports after that level's
+  local moving: Louvain's level partitions, and Leiden's non-refined phase-1
+  partition lifted to the base graph. Quality is non-decreasing along the
+  levels.
+- Louvain's levels nest: every community of level `i+1` is a union of level
+  `i` communities. Leiden's levels are not promised to nest, because each
+  level after the first is computed on an aggregate of the refined
+  sub-communities, which a coarser level can split differently; the godoc
+  says so.
+- Under `WithIterations(k)`, the levels are the final pass's only, so the
+  last level is always the reported result.
+- Levels are stored internally as dense partitions with their qualities, so a
+  later `LevelResult(i) *Result` can wrap one through the same constructor as
+  the run's own result without an API break. That accessor is not part of
+  v0.2.0.
+- Deterministic like the result: byte-identical across runs for a fixed seed,
+  and across worker counts under `WithParallelism`.
 
 Betweenness:
 
@@ -318,6 +346,50 @@ Verify: `markdownlint-cli2` clean on every touched markdown file; `go vet`
 and the doc examples compile as `Example` tests; `make validate` green in
 both modules.
 
+## Milestone 6: additions before the tag
+
+### Step 9: level hierarchy on Result
+
+Build: record each level's base partition and quality in the Leiden and
+Louvain level loops (Leiden: the final pass of `WithIterations`), store them
+on `Result` through `newResult`, and add `NumLevels`, `Level`, `LevelQuality`
+with the pinned semantics. Update the design of record: section 2 keeps
+hierarchical output in scope, section 3's sketch and API bullet gain the
+level accessors and drop the "not yet public" sentence, section 4.6 gains the
+level semantics (including the Leiden nesting caveat). Package doc and
+correspondence register as needed.
+
+Test-first:
+
+- Last level equals `Communities()` and `LevelQuality(last) == Quality()`,
+  for Leiden and Louvain, serial and parallel, on the corpus.
+- Every level is a well-formed dense partition over all keys; quality is
+  non-decreasing along the levels (matching the existing internal
+  `louvainLevels` and Leiden level-monotonicity tests).
+- Louvain levels nest; Leiden levels are not asserted to nest.
+- `Level` and `LevelQuality` out of range return nil and 0.
+- `WithIterations(k)`: levels are those of the final pass (the last level
+  equals the result for k > 1).
+- Determinism: levels byte-identical across repeated runs and across
+  `WithParallelism` worker counts.
+- A graph whose first local move merges nothing reports one level, equal to
+  the all-singletons result.
+
+### Step 10: mutation target on a clean export
+
+Build: change the `mutation` target in the Makefile so it exports the
+committed tree (`git archive HEAD`) to a temp directory outside the repo and
+runs gremlins there, excludes `verification/` alongside `gonum/`, and
+defaults `MUTATION_WORKERS` to 4. Document in the target's comment that it
+mutates committed code only. Run it after Step 9 so the confirmation run also
+covers the level code.
+
+Verify: `make mutation` passes the committed threshold; mutator coverage is
+reported without the reference tool (about 97% before Step 9); the temp
+footprint stays in the low hundreds of MB; the `.gremlins.yaml` score comment
+and `docs/specs/learnings.md` record the new figures; survivors in the Step 9
+code are killed or triaged.
+
 ## Exit criteria for this list
 
 All four deliverables present on the public API with the pinned semantics,
@@ -325,7 +397,8 @@ undirected and directed; the toolchain at Go 1.27 in both modules; test tier
 green: brute-force oracles, closed forms, networkx references, determinism,
 reconciliation against the corpus, fuzz, mutation above threshold, and
 benchmarks under the regression guard; the design of record, package docs,
-and correspondence register updated.
+and correspondence register updated; the level hierarchy on `Result` (Step 9)
+and the mutation target running on a clean export (Step 10).
 
 Tagging follows as a user action: tag the core `v0.2.0`. The graphomania
 v0.0.3 gate closes when the core tag exists and its library module pins it.
