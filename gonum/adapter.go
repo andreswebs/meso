@@ -4,7 +4,10 @@
 // It lives in its own module so that gonum is an opt-in dependency: the meso
 // core (github.com/andreswebs/meso) never imports it. Convert a gonum graph
 // with [Build], run [meso.Leiden] or [meso.Louvain] on the result, then map the
-// detected communities back onto the original gonum node IDs with [Communities].
+// detected communities back onto the original gonum node IDs with [Communities]
+// or [Members]. [Betweenness] reports node betweenness by gonum node ID. The
+// other structural measures ([meso.Subgraph], the Graph and Result accessors)
+// work on the *meso.Graph Build returns, keyed by the decimal node ID.
 //
 // See docs/meso-design.md sections 3 and 9 for the design of record.
 package gonum
@@ -31,13 +34,61 @@ func Communities(r *meso.Result) (map[int64]int, error) {
 	labels := r.Communities()
 	comm := make(map[int64]int, len(labels))
 	for k, c := range labels {
-		id, err := strconv.ParseInt(k, 10, 64)
+		id, err := nodeID(k)
 		if err != nil {
-			return nil, fmt.Errorf("gonum: result key %q is not a gonum node ID: %w", k, err)
+			return nil, err
 		}
 		comm[id] = c
 	}
 	return comm, nil
+}
+
+// nodeID inverts key: it parses a meso key back to the gonum node ID [Build]
+// issued it for, or reports a key that is not one.
+func nodeID(k string) (int64, error) {
+	id, err := strconv.ParseInt(k, 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("gonum: result key %q is not a gonum node ID: %w", k, err)
+	}
+	return id, nil
+}
+
+// Betweenness returns [meso.Betweenness] of g keyed by gonum node ID, for a g
+// built by [Build]. It returns an error if g's keys are not Build-issued node
+// IDs (for example a graph built directly through the core).
+func Betweenness(g *meso.Graph) (map[int64]float64, error) {
+	values := meso.Betweenness(g)
+	out := make(map[int64]float64, len(values))
+	for k, v := range values {
+		id, err := nodeID(k)
+		if err != nil {
+			return nil, err
+		}
+		out[id] = v
+	}
+	return out, nil
+}
+
+// Members returns the gonum node IDs of community label of r, in the dense
+// index order of [meso.Result.Members]. [Build] indexes canonically by the
+// decimal key, so that order is ascending by decimal string (10 sorts before
+// 2), not numeric. It returns nil and no error for a label outside
+// [0, r.NumCommunities()), and an error if r's keys are not Build-issued node
+// IDs.
+func Members(r *meso.Result, label int) ([]int64, error) {
+	keys := r.Members(label)
+	if keys == nil {
+		return nil, nil
+	}
+	ids := make([]int64, len(keys))
+	for i, k := range keys {
+		id, err := nodeID(k)
+		if err != nil {
+			return nil, err
+		}
+		ids[i] = id
+	}
+	return ids, nil
 }
 
 // Build converts a gonum graph into an immutable meso [meso.Graph], preserving

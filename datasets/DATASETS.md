@@ -94,6 +94,12 @@ test time.
   `0.1 … 0.7` realizes about `0.15 … 0.90` (recorded); thresholds key off the
   recorded realized `μ`. Self-loops networkx emits are stripped.
 
+## Copies outside this directory
+
+`gonum/testdata/karate.gml` is a byte-identical copy of `karate/karate.gml`.
+The gonum adapter is its own module, so its tests cannot read this directory
+when run from the module cache; the copy keeps them self-contained.
+
 ## Licensing / distribution note
 
 These are third-party research datasets, redistributed for local testing only. Cite the source papers (see the bibliography) in
