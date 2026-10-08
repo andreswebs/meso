@@ -1423,3 +1423,25 @@ kept for whoever picks up the next step.
 - Consequence for tests: the zero-weight-bridge test passes with and without
   the change, so it is an end-to-end guard, not a red-green proof. The
   discriminating tests are the adjacency assertions in `builder_test.go`.
+
+## Spec 002: networkx betweenness references (mes-ar6b)
+
+- meso's `Betweenness` agrees with networkx 3.4.2 to the last few bits on the
+  corpus (worst 5.6e-17; lesmis bit-exact), because the accumulation uses
+  networkx's own form `sigma[v] * (1 + delta[w]) / sigma[w]`. The Go test holds
+  it to 1e-12, not the 1e-9 the plan allowed.
+- The commonly quoted karate values (node 34 "0.3040") are truncated, not
+  rounded: the true value is 0.30407. Compare quoted figures within one unit
+  in the last quoted place.
+- `celegansneural.gml` lists some arcs twice without declaring `multigraph 1`,
+  so `networkx.read_gml` refuses it. `datasets/betweenness.py` retries with the
+  header injected and collapses to a simple `DiGraph`, the same folding as
+  meso's builder (2359 GML edge blocks become 2345 arcs).
+- Typing a networkx script: pyright strict reads networkx's bundled stubs,
+  where `Graph` is generic, while ty reads the runtime package, where it is
+  not, so `nx.Graph[int]` satisfies one checker and fails the other. Follow
+  `datasets/lfr/generate.py`: hold the graph as `cast("Any", ...)` at the
+  library boundary, cast the values you read out to concrete types, and put a
+  targeted `# pyright: ignore[reportUnknownMemberType]` on the stub-gap calls.
+  The repo's Python scripts are not `ruff format`ted; formatting would also
+  split those calls away from their ignore comments.
