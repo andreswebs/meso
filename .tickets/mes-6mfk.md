@@ -1,6 +1,6 @@
 ---
 id: mes-6mfk
-status: open
+status: closed
 deps: [mes-ojdd, mes-8x09]
 links: []
 created: 2026-10-07T16:34:15Z
@@ -41,3 +41,11 @@ Feed a `Canonical()` builder of the same directedness (`NewBuilder` or `NewDirec
 ## Acceptance Criteria
 
 TDD order. 1) For every member pair `Weight` agrees between `g` and the subgraph; no non-member key is present; `NumEdges` equals the count of `g`'s edges inside the set. 2) Self-loops, node weights, directedness and arc direction survive. 3) A non-canonical `g` built in two insertion orders gives subgraphs with identical `Keys()` and identical Leiden output under a fixed seed. 4) Unknown key wraps `ErrUnknownKey`; duplicate wraps `ErrDuplicateKey`; empty list builds an empty graph. 5) `Subgraph(g, g.Keys())` on a canonical `g` matches `g` in keys, edges, weights, and Leiden output. 6) On karate, the largest Leiden community's subgraph re-runs through Leiden with dense labels and every inner community connected. `make validate` green in both modules (fmt-check, vet, lint, test).
+
+## Notes
+
+**2026-10-08T01:54:42Z**
+
+Done. New subgraph.go: sentinels `ErrUnknownKey`, `ErrDuplicateKey` (the package's first exported errors; wrapped with `%w %q` so messages name the key) and `Subgraph(g, keys)`. It validates the key set first, then feeds a `Canonical()` builder of g's directedness: `AddNodeWeight` for every member (always, since unset sizes default to 1), its self-loop when positive, and each member-to-member adjacency entry (undirected: only from the lower dense index, because AddEdge would fold both directions into a doubled weight). Going through the Builder keeps every validation and invariant.
+
+Tests in subgraph_test.go: `assertInduced` helper (keys ascending, directedness, Weight for every member pair incl. self-loops, node sizes, NumEdges); induced fixture with self-loop and node weights; errors (errors.Is + key in message, nil graph); empty list for both directednesses; directed arc direction; karate built in two non-canonical insertion orders gives identical subgraph Keys and identical Leiden output; Subgraph(g, g.Keys()) on canonical lesmis matches g in structure and Leiden output; karate largest-community re-split gives dense labels and connected inner communities. `make validate` green.
