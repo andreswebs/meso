@@ -1,6 +1,6 @@
 ---
 id: mes-0jzi
-status: open
+status: closed
 deps: []
 links: []
 created: 2026-10-07T16:34:15Z

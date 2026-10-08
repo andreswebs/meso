@@ -1,6 +1,6 @@
 ---
 id: mes-bctb
-status: open
+status: in_progress
 deps: [mes-0jzi]
 links: []
 created: 2026-10-07T16:34:16Z

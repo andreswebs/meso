@@ -1,4 +1,4 @@
-github.com/andreswebs/meso v0.1.0 h1:Yak4ORKPMOSPBNwPRQFrLRhix33DzQ9etH/liPmKnME=
-github.com/andreswebs/meso v0.1.0/go.mod h1:YHPeFDjROQfAFcT7NgLJncARQxMnOUYmriM2ZfQRhrQ=
+github.com/andreswebs/meso v0.2.0 h1:c5xLOdwYmSuIXKLS9BqVIeyzb0kwDq71a1OUQsIe+X8=
+github.com/andreswebs/meso v0.2.0/go.mod h1:Inkdr26UMUoE0RtHjYgzTT1TPsAT9wbi5HDesAbfgMo=
 gonum.org/v1/gonum v0.17.0 h1:VbpOemQlsSMrYmn7T2OUvQ4dqxQXU+ouZFQsZOx50z4=
 gonum.org/v1/gonum v0.17.0/go.mod h1:El3tOrEuMpv2UdMrbNlKEh9vd86bmQ6vqIcDwxEOc1E=
