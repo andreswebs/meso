@@ -185,23 +185,21 @@ func (s byNumericKey) Less(i, j int) bool {
 	return s[i] < s[j]
 }
 
-// loadGMLGraph reads a Newman-format GML graph into a public *Graph via the
-// Builder. Nodes are registered in ascending numeric id order first (so isolated
-// nodes survive and the labelling is order-independent), then edges are added;
-// an edge weight comes from the GML value/weight attribute, defaulting to 1.
-func loadGMLGraph(t testing.TB, path string) *Graph {
+// gmlEdge is one edge block of a GML file: source and target ids and the
+// weight from its value or weight attribute (1 when absent).
+type gmlEdge struct {
+	src, tgt string
+	w        float64
+}
+
+// parseGML reads the node ids and edge blocks of a GML file, without folding.
+// Node ids come back in ascending numeric order.
+func parseGML(t testing.TB, path string) (nodes []string, edges []gmlEdge) {
 	t.Helper()
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read %s: %v", path, err)
 	}
-
-	type edge struct {
-		src, tgt string
-		w        float64
-	}
-	var nodes []string
-	var edges []edge
 
 	var block string // "node" or "edge" or ""
 	var src, tgt string
@@ -237,13 +235,22 @@ func loadGMLGraph(t testing.TB, path string) *Graph {
 			}
 		case "]":
 			if block == "edge" && haveSrc && haveTgt {
-				edges = append(edges, edge{src, tgt, w})
+				edges = append(edges, gmlEdge{src, tgt, w})
 			}
 			block = ""
 		}
 	}
-
 	sort.Sort(byNumericKey(nodes))
+	return nodes, edges
+}
+
+// loadGMLGraph reads a Newman-format GML graph into a public *Graph via the
+// Builder. Nodes are registered in ascending numeric id order first (so isolated
+// nodes survive and the labelling is order-independent), then edges are added;
+// an edge weight comes from the GML value/weight attribute, defaulting to 1.
+func loadGMLGraph(t testing.TB, path string) *Graph {
+	t.Helper()
+	nodes, edges := parseGML(t, path)
 	b := NewBuilder()
 	for _, id := range nodes {
 		b.AddNodeWeight(id, 1)
