@@ -17,7 +17,7 @@ MODULES := . gonum
 # Fuzz targets live in the core module. `make validate` already runs their seed
 # corpus (go test executes seeds without a mutation budget); `make fuzz` drives a
 # real mutation search on demand, one target per invocation.
-FUZZ_TARGETS := FuzzLeidenLouvain FuzzFoldingTwoM FuzzDirected
+FUZZ_TARGETS := FuzzLeidenLouvain FuzzFoldingTwoM FuzzDirected FuzzBetweenness FuzzSubgraph
 FUZZTIME     ?= 30s
 
 # Benchmarks live in the core module. `make bench` captures a run; `make
