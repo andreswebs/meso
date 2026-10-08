@@ -1,6 +1,6 @@
 ---
 id: mes-ctmy
-status: open
+status: closed
 deps: [mes-rogj]
 links: []
 created: 2026-10-08T03:49:46Z
@@ -34,3 +34,11 @@ The target exports `HEAD` (`git archive HEAD | tar -x -C <tmp>/tree`) into a fre
 ## Acceptance Criteria
 
 1) `make mutation` passes the committed threshold from a working tree that has `.lake`, without copying it (temp footprint in the low hundreds of MB; record it). 2) No `verification/` mutants in the output; record mutator coverage and efficacy. 3) Survivors in the level-hierarchy code are killed or triaged in `docs/specs/learnings.md`. 4) `.gremlins.yaml` score comment and the Makefile comment block above the target updated. 5) `make validate` green.
+
+## Notes
+
+**2026-10-08T04:34:47Z**
+
+Done. Makefile `mutation` target now: warns if tracked Go files have uncommitted changes (only HEAD is mutated); exports HEAD with `git archive` into `mktemp -d` under the system temp dir; runs gremlins from the export with its TMPDIR in a sibling dir (never inside the tree); excludes `-E 'gonum/' -E 'verification/'` (gremlins v0.6.0 takes a repeatable string array); removes the work dir via `trap` on exit; exit status propagates. `MUTATION_WORKERS ?= 4`; the comment block above the target explains the export and exclusions.
+
+Confirmation run from the real working tree (with its 7.9 GB .lake) at 031452b: 32m07s, working area peaked at 126 MB and was removed afterwards, exit 0. Efficacy 89.34% (394 killed, 47 lived, 16 timed out; threshold 85 unchanged), mutator coverage 97.35% (was 54.89% with verification/ counted), no verification/ paths in the output, go.mod byte-identical. Level-hierarchy code: no survivors. Remaining spec 002 items are the already-triaged subgraph.go dedup equivalents and the accessors.go switch-case coverage artifacts; leiden.go:289 is the spec 001 aggregation guard (shifted lines). `.gremlins.yaml` score comment and learnings updated. `make validate` green.

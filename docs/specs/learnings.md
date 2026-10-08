@@ -1510,3 +1510,19 @@ kept for whoever picks up the next step.
   concatenated", compare the final pass's first level against the (k-1)-pass
   result: on lesmis seed 9 the first pass starts at 0.547 and ends at 0.566, so
   a concatenated history would start below the earlier result.
+
+## Spec 002: mutation target on a clean export (mes-ctmy)
+
+- `make mutation` now exports `HEAD` with `git archive` into a fresh
+  `mktemp -d` directory, runs gremlins there with its `TMPDIR` in a sibling
+  directory, removes everything on exit (a `trap`), and warns when tracked Go
+  files have uncommitted changes, since those are not mutated.
+- gremlins v0.6.0's `-E/--exclude-files` is a repeatable string array, so
+  `-E 'gonum/' -E 'verification/'` works; the run output carries no
+  `verification/` path.
+- Confirmation run at `031452b` (levels included), 4 workers: 32m07s, peak
+  working area 126 MB, efficacy 89.34% (394 killed, 47 lived, 16 timed out),
+  mutator coverage 97.35%. The level-hierarchy code has no survivors. The 12
+  NOT COVERED are the 8 `switch`-case artifacts in `accessors.go` (killed by
+  hand, see mes-5e63) and 4 spec 001 lines. `go.mod` byte-identical after the
+  run.

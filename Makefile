@@ -57,14 +57,18 @@ GOVULNCHECK_VERSION ?= v1.6.0
 # mutant. The efficacy gate lives in .gremlins.yaml: gremlins v0.6.0 ignores the
 # --threshold-* CLI flags (they arrive as strings and fail an internal type
 # assertion), so the committed threshold must be in the config file, not here.
-# gremlins copies the whole module tree into a temp working dir per worker, so
-# MUTATION_WORKERS stays serial by default; raise it where cores and temp space
-# allow. The per-mutant timeout is (2s + measured-suite-time) * the coefficient,
-# kept generous so honest mutants are not misreported as TIMED OUT (an
+# gremlins copies the whole module tree into a temp working dir per worker, and
+# a working tree carrying the gitignored Lean build (verification/lean/.lake) is
+# gigabytes. So the target mutates a clean `git archive HEAD` export in a fresh
+# temp dir instead (about 10 MB per copy), with gremlins' own TMPDIR beside it
+# and outside the export: only committed code is mutated. verification/ (the
+# reference tools) and gonum/ (its own module) are excluded. The per-mutant
+# timeout is (2s + measured-suite-time) * the coefficient, kept generous so
+# honest mutants are not misreported as TIMED OUT (an
 # infinite-loop mutant, e.g. a loop counter's ++ flipped to --, still hits the
 # ceiling and is reported TIMED OUT).
 GREMLINS_VERSION       ?= v0.6.0
-MUTATION_WORKERS       ?= 1
+MUTATION_WORKERS       ?= 4
 MUTATION_TIMEOUT_COEFF ?= 8
 
 .PHONY: help validate test test-race vet build lint fmt fmt-check tidy cover clean lean oracle-lean fuzz bench bench-baseline bench-check bench-compare mutation verify-gobra vulncheck
@@ -89,11 +93,21 @@ fuzz: ## Mutation-fuzz each native target (override FUZZTIME, default 30s each)
 		$(GO) test -run='^$$' -fuzz="^$$t$$" -fuzztime=$(FUZZTIME) .; \
 	done
 
-mutation: ## Mutation-test the core; fails under the .gremlins.yaml efficacy gate
-	$(GO) run github.com/go-gremlins/gremlins/cmd/gremlins@$(GREMLINS_VERSION) unleash . \
+mutation: ## Mutation-test committed core code on a clean export; fails under the .gremlins.yaml gate
+	@set -eu; \
+	if [ -n "$$(git status --porcelain --untracked-files=no -- '*.go')" ]; then \
+		echo "warning: uncommitted Go changes are not mutated; only HEAD is exported"; \
+	fi; \
+	work=$$(mktemp -d "$${TMPDIR:-/tmp}/meso-mutation.XXXXXX"); \
+	trap 'rm -rf "$$work"' EXIT; \
+	mkdir "$$work/tree" "$$work/tmp"; \
+	git archive HEAD | tar -x -C "$$work/tree"; \
+	echo "==> mutation of $$(git rev-parse --short HEAD) in $$work ($(MUTATION_WORKERS) workers)"; \
+	cd "$$work/tree" && TMPDIR="$$work/tmp" $(GO) run github.com/go-gremlins/gremlins/cmd/gremlins@$(GREMLINS_VERSION) unleash . \
 		--workers $(MUTATION_WORKERS) \
 		--timeout-coefficient $(MUTATION_TIMEOUT_COEFF) \
-		-E 'gonum/'
+		-E 'gonum/' \
+		-E 'verification/'
 
 bench: ## Run the benchmark suite, writing results to BENCH_OUT
 	$(GO) test -run='^$$' -bench='$(BENCH_RE)' -benchmem -benchtime=$(BENCHTIME) -count=$(BENCHCOUNT) . | tee $(BENCH_OUT)
