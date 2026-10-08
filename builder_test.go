@@ -147,10 +147,11 @@ func TestBuilder_NegativeWeightsRejected(t *testing.T) {
 	}
 }
 
-func TestBuilder_ZeroWeightsAccepted(t *testing.T) {
-	// The rejection guard is weight >= 0 (and size >= 0), so zero is the accepted
-	// boundary, not an error: a zero-weight edge folds in as a zero-weight
-	// neighbour entry and a zero-size node keeps size 0.
+func TestBuilder_ZeroWeightEdgeDropped(t *testing.T) {
+	// Zero is the accepted boundary of the weight >= 0 guard, so a zero-weight
+	// edge is not an error, but it is not an edge either: Build omits it from the
+	// adjacency while still registering both endpoints. A zero-size node keeps
+	// size 0.
 	g, err := NewBuilder().
 		AddEdge("a", "b", 0.0).
 		AddNodeWeight("c", 0.0).
@@ -165,11 +166,55 @@ func TestBuilder_ZeroWeightsAccepted(t *testing.T) {
 	a, _ := g.Index("a")
 	b, _ := g.Index("b")
 	c, _ := g.Index("c")
-	if got := edgeWeight(g.model, a, b); got != 0 {
-		t.Errorf("edge weight a-b = %v, want 0", got)
+	if got := g.model.neighbors(a); len(got) != 0 {
+		t.Errorf("neighbors(a) = %v, want none", got)
+	}
+	if got := g.model.neighbors(b); len(got) != 0 {
+		t.Errorf("neighbors(b) = %v, want none", got)
 	}
 	if got := g.model.nodeSize(c); got != 0 {
 		t.Errorf("nodeSize(c) = %v, want 0", got)
+	}
+}
+
+func TestBuilder_ZeroWeightArcDropped(t *testing.T) {
+	// A zero-weight arc leaves neither an out- nor an in-entry; beside it a
+	// positive reverse arc survives on its own.
+	g, err := NewDirectedBuilder().
+		AddEdge("a", "b", 0.0).
+		AddEdge("b", "a", 2.0).
+		Build()
+	if err != nil {
+		t.Fatalf("Build() error = %v", err)
+	}
+	a, _ := g.Index("a")
+	b, _ := g.Index("b")
+	if got := g.model.neighbors(a); len(got) != 0 {
+		t.Errorf("out-neighbors(a) = %v, want none", got)
+	}
+	if got := g.model.inNeighbors(b); len(got) != 0 {
+		t.Errorf("in-neighbors(b) = %v, want none", got)
+	}
+	if got := g.model.neighbors(b); len(got) != 1 || got[0] != a {
+		t.Errorf("out-neighbors(b) = %v, want [%d]", got, a)
+	}
+	if got := edgeWeight(g.model, b, a); got != 2 {
+		t.Errorf("arc b->a weight = %v, want 2", got)
+	}
+}
+
+func TestBuilder_ZeroParallelFoldsIntoPositive(t *testing.T) {
+	g, err := NewBuilder().AddEdge("a", "b", 0).AddEdge("b", "a", 1.5).Build()
+	if err != nil {
+		t.Fatalf("Build() error = %v", err)
+	}
+	a, _ := g.Index("a")
+	b, _ := g.Index("b")
+	if got := g.model.neighbors(a); len(got) != 1 || got[0] != b {
+		t.Fatalf("neighbors(a) = %v, want [%d]", got, b)
+	}
+	if got := edgeWeight(g.model, a, b); got != 1.5 {
+		t.Errorf("edge weight = %v, want 1.5", got)
 	}
 }
 
@@ -272,5 +317,38 @@ func TestBuilder_DirectedInOutSeparable(t *testing.T) {
 	}
 	if got := g.model.inDegree(b); got != 2 {
 		t.Errorf("inDegree(b) = %v, want 2 (arc a->b)", got)
+	}
+}
+
+func TestBuilder_ZeroWeightBridgeSeparatesCommunities(t *testing.T) {
+	// End-to-end guard: two triangles joined only by a zero-weight edge are two
+	// components, so no optimiser may place them in one community. This held
+	// before the builder dropped zero-weight edges too (a zero weight adds no
+	// quality, and communityConnected already follows only positive weights);
+	// it pins that the builder change and the optimisers agree.
+	for _, run := range []struct {
+		name string
+		fn   func(*Graph, ...Option) (*Result, error)
+	}{{"Leiden", Leiden}, {"Louvain", Louvain}} {
+		g, err := NewBuilder().
+			AddEdge("a", "b", 1).AddEdge("b", "c", 1).AddEdge("c", "a", 1).
+			AddEdge("x", "y", 1).AddEdge("y", "z", 1).AddEdge("z", "x", 1).
+			AddEdge("c", "x", 0).
+			Build()
+		if err != nil {
+			t.Fatalf("Build() error = %v", err)
+		}
+		res, err := run.fn(g, WithQuality(CPM(0)), WithSeed(1))
+		if err != nil {
+			t.Fatalf("%s error = %v", run.name, err)
+		}
+		comm := res.Communities()
+		for _, l := range []string{"a", "b", "c"} {
+			for _, r := range []string{"x", "y", "z"} {
+				if comm[l] == comm[r] {
+					t.Errorf("%s: %s and %s share community %d across a zero-weight bridge", run.name, l, r, comm[l])
+				}
+			}
+		}
 	}
 }

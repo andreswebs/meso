@@ -1396,3 +1396,30 @@ kept for whoever picks up the next step.
   directed run cannot silently misread an undirected graph. celegans emits the
   two anchor partitions (all-in-one, singletons) only; no ground truth exists
   for it.
+
+## Spec 002: Go 1.27 toolchain and benchmark baseline (mes-rfgu)
+
+- The committed `benchmarks/baseline.txt` is recorded on linux/arm64 with
+  GOMAXPROCS 4, in Docker on the maintainer's machine, not on the host. Keep
+  regenerating it the same way so the benchmark names and machine profile stay
+  comparable:
+  `docker run --rm --cpus=4 -v "$PWD:/work" -w /work golang:<version>-bookworm go test -run='^$' -bench=. -benchmem -benchtime=10x -count=6 . > benchmarks/baseline.txt`.
+- A baseline compared across months reads slower from machine drift alone
+  (about 12% here). Attribute a change to the toolchain only with an
+  interleaved A/B: the old tree on the old image and the new tree on the new
+  image, run back to back. Go 1.26.5 to 1.27.1 showed no significant ns/op
+  change; planted-300 lost a few allocations with bit-identical output.
+
+## Spec 002: builder drops zero-weight edges (mes-dj0k)
+
+- `Build` now omits any edge or arc whose folded weight is zero; `AddEdge`
+  still registers both endpoints, so they survive as nodes.
+- The change is invisible to the optimisers. A zero weight adds nothing to
+  modularity or CPM, and `communityConnected` (the Lean `CommunityConnected`
+  image) already followed only positive-weight edges. What it fixes is the
+  structural view the v0.2.0 accessors and measures expose: without it a
+  zero-weight entry would count as an edge in `NumEdges`, `Degree`,
+  `Cohesion` and as a hop in `Betweenness`.
+- Consequence for tests: the zero-weight-bridge test passes with and without
+  the change, so it is an end-to-end guard, not a red-green proof. The
+  discriminating tests are the adjacency assertions in `builder_test.go`.
