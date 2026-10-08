@@ -1,6 +1,6 @@
 ---
 id: mes-rogj
-status: open
+status: closed
 deps: []
 links: []
 created: 2026-10-08T03:49:46Z
@@ -56,3 +56,13 @@ func (r *Result) LevelQuality(i int) float64
 ## Acceptance Criteria
 
 TDD order. 1) Last level equals `Communities()` and `LevelQuality(last) == Quality()` for Leiden and Louvain, serial and parallel, on the corpus. 2) Every level is a well-formed dense partition over all keys; quality is non-decreasing along the levels for modularity, CPM and directed modularity (celegansneural via `loadGMLDirectedGraph`). 3) Louvain levels nest; Leiden levels are not asserted to nest. 4) Out-of-range `Level`/`LevelQuality` give nil/0. 5) `WithIterations(k > 1)`: levels are the final pass's (last level equals the result). 6) Levels byte-identical across repeated runs and across worker counts. 7) A graph whose first local move merges nothing reports one level equal to the all-singletons result. 8) `TestLeiden_TraceMatchesRun` also checks trace bases against production levels. 9) Design doc, package doc, README and an `Example` updated; `markdownlint-cli2` clean. `make validate` green; record learnings in `docs/specs/learnings.md` if any.
+
+## Notes
+
+**2026-10-08T03:57:53Z**
+
+Done. New API in level_accessors.go: `NumLevels()`, `Level(i) map[string]int` (nil out of range), `LevelQuality(i) float64` (0 out of range); godoc states the Leiden nesting caveat and final-pass-only under WithIterations.
+
+Engine: leiden.go gains `leidenLevelsWith` (the loop now appends each level's canonical base partition) and `leidenIteratedLevels` (final pass's levels); `leidenWith` is a wrapper returning the last level (kept for internal tests); `leidenIterated` removed (unused after the switch). api.go: `Result` gains `levels []Partition` and `levelQuality []float64`, set by the new `newRunResult(g, obj, levels)`, which wraps `newResult` and computes each level's quality once. A future `LevelResult(i)` is `newResult(r.g, r.levels[i], r.levelQuality[i])`. Public `Louvain` now uses `louvainTraceWith` directly with the serial or parallel mover (same result as before). Default behaviour byte-identical: golden, oracle, determinism suites unchanged.
+
+Tests (levels_test.go): last level == Communities() and LevelQuality(last) == Quality() for both algorithms, serial and parallel, on 5 corpus graphs; every level dense and quality non-decreasing for modularity, CPM and DirectedModularity (celegansneural, the first directed level-monotonicity assertion: holds); Louvain nesting; out of range; single level when nothing merges; WithIterations final pass (discriminating: first-pass level 0 is 0.547 vs earlier result 0.566 on lesmis); byte-identical across runs and 1/2/4/8 workers. `TestLeiden_TraceMatchesRun` now pins every leidenTrace level to production (leidenTrace untouched per owner ruling). `ExampleResult_Level` (ring of 12 triangles: 12 -> 6 communities, values hand-checked). Docs: design sections 3 and 4.6 (the "not yet public" sentence removed), doc.go, README. `make validate` and -race green; learnings recorded.

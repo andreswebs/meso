@@ -2,6 +2,7 @@ package meso
 
 import (
 	"math/rand"
+	"slices"
 	"testing"
 )
 
@@ -279,9 +280,9 @@ func leidenTrace(g *csr, obj objective, seed uint64) []leidenLevel {
 }
 
 // TestLeiden_TraceMatchesRun pins leidenTrace to the production leiden(): the
-// last level's base partition must equal leiden's returned partition, so the
-// invariant checks that walk the trace are checking the real run's levels, not a
-// drifted copy.
+// last level's base partition must equal leiden's returned partition, and every
+// level must equal the production levels Result reports, so the invariant checks
+// that walk the trace are checking the real run's levels, not a drifted copy.
 func TestLeiden_TraceMatchesRun(t *testing.T) {
 	for _, tc := range corpusAndFuzzed(t, 1234) {
 		for _, obj := range []objective{modularity{gamma: 1.0}, cpm{gamma: 0.3}} {
@@ -295,6 +296,15 @@ func TestLeiden_TraceMatchesRun(t *testing.T) {
 				if last[i] != run[i] {
 					t.Fatalf("%s %T: trace last level differs from leiden() at node %d (%d vs %d)",
 						tc.name, obj, i, last[i], run[i])
+				}
+			}
+			prod := leidenLevelsWith(tc.g, obj, 88, serialLeidenMover, singleton(tc.g.numNodes()))
+			if len(prod) != len(levels) {
+				t.Fatalf("%s %T: trace has %d levels, production reports %d", tc.name, obj, len(levels), len(prod))
+			}
+			for l := range prod {
+				if !slices.Equal(prod[l], levels[l].base) {
+					t.Fatalf("%s %T: level %d differs between trace and production", tc.name, obj, l)
 				}
 			}
 		}

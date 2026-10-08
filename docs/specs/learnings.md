@@ -1490,3 +1490,23 @@ kept for whoever picks up the next step.
   `TestBuilder_ZeroWeightEdgeDropped` in mes-dj0k; it still builds a zero
   weight without error, so it still kills that mutant (the run shows it
   killed).
+
+## Spec 002: level hierarchy on Result (mes-rogj)
+
+- Production now records levels: `leidenLevelsWith` (the former `leidenWith`
+  body, appending one base partition per loop iteration) and
+  `leidenIteratedLevels` (final pass only); `leidenWith` is a thin wrapper kept
+  for the internal tests, and the old `leidenIterated` was removed once
+  `Leiden` stopped calling it. Louvain reuses `louvainTraceWith`. `newRunResult`
+  computes each level's quality once (one O(m) evaluation per level).
+- The test-only `leidenTrace` was kept by owner ruling; `TestLeiden_TraceMatchesRun`
+  now pins every level of it to `leidenLevelsWith`, not just the last.
+- Directed modularity's level monotonicity is now asserted for the first time
+  (celegansneural, Leiden and Louvain) and holds.
+- Louvain's last level always repeats the one before it whenever more than one
+  level exists: the final pass is the one whose local move merges nothing. The
+  `ExampleResult_Level` output shows it; it is not a bug.
+- To make a "final pass only" test discriminate from "all passes
+  concatenated", compare the final pass's first level against the (k-1)-pass
+  result: on lesmis seed 9 the first pass starts at 0.547 and ends at 0.566, so
+  a concatenated history would start below the earlier result.

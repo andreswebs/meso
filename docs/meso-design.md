@@ -63,7 +63,8 @@ overlapping communities, dynamic/streaming updates (possible later).
   gonum into consumers that do not want it.
 - Structure is readable back out (section 4.6): `Graph.Keys`, `NumEdges`,
   `Degree`, `Neighbors`, `Weight`; `Result.NumCommunities`, `Members`,
-  `Cohesion`; and the package functions `Betweenness` and `Subgraph`.
+  `Cohesion`; the level hierarchy `Result.NumLevels`, `Level`,
+  `LevelQuality`; and the package functions `Betweenness` and `Subgraph`.
 
 Sketch:
 
@@ -75,13 +76,11 @@ g := meso.NewBuilder().
 
 res, err := meso.Leiden(g, meso.WithQuality(meso.Modularity(1.0)), meso.WithSeed(42))
 // res.Communities(), res.Quality(), res.Members(0), res.Cohesion(0)
+// res.NumLevels(), res.Level(0), res.LevelQuality(0)
 
 bc := meso.Betweenness(g)
 sub, err := meso.Subgraph(g, res.Members(0))
 ```
-
-The level hierarchy is in scope but not yet public: Louvain computes it
-internally and no `Result` accessor exposes it.
 
 ## 4. Algorithms
 
@@ -207,6 +206,21 @@ weight, and `g`'s directedness. It is always canonically indexed, whatever
 `g`'s indexing, so a second Leiden pass over one community is a pure function
 of its members. Unknown and repeated keys are errors wrapping `ErrUnknownKey`
 and `ErrDuplicateKey`.
+
+Level hierarchy: `NumLevels()`, `Level(i)` and `LevelQuality(i)` report each
+level of the multilevel run, finest first, as caller-keyed dense labels and
+the level's quality under the run's objective; out of range gives nil and 0.
+The last level is the result and its quality is `Quality()`. A level is the
+base-graph partition reached after that level's local moving: Louvain's level
+partitions, and Leiden's non-refined phase-1 partition lifted to the base
+graph. Quality never decreases from one level to the next, for modularity, CPM
+and directed modularity alike. Louvain's levels nest, each a coarsening of the
+previous; Leiden's are not promised to, because from the second level on it
+aggregates the refined sub-communities, which a coarser level can divide
+differently. Under `WithIterations(k)` the levels are the final pass's. Levels
+are stored as dense partitions with their qualities, so a later
+`LevelResult(i) *Result` can expose a level as a full result without an API
+break; it is not provided yet.
 
 `Betweenness(g)` is Brandes' algorithm (Brandes, 2001) over unweighted shortest
 paths: every edge is one hop, and edge weights, node weights and self-loops are

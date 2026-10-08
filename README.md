@@ -3,8 +3,9 @@
 `meso` is a pure-Go, deterministic library for the mesoscale structure of a
 weighted graph, the level between individual nodes and the whole network. It
 detects communities with the Leiden algorithm (Traag, Waltman, van Eck, 2019),
-with Louvain as its baseline, and measures the structure around them: node
-betweenness centrality, community cohesion, and canonical induced subgraphs.
+with Louvain as its baseline, reports the multilevel hierarchy of each run,
+and measures the structure around the communities: node betweenness
+centrality, community cohesion, and canonical induced subgraphs.
 
 ```go
 g, err := meso.NewBuilder().Canonical().
@@ -15,6 +16,10 @@ g, err := meso.NewBuilder().Canonical().
 res, err := meso.Leiden(g, meso.WithSeed(42))
 for l := range res.NumCommunities() {
     fmt.Println(res.Members(l), res.Cohesion(l))
+}
+
+for l := range res.NumLevels() {               // the multilevel hierarchy
+    fmt.Println(l, res.Level(l), res.LevelQuality(l))
 }
 
 bc := meso.Betweenness(g)                       // normalized to [0, 1]

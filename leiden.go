@@ -216,21 +216,23 @@ func passSeed(seed uint64, pass int) uint64 {
 	return nodeSeed(seed, pass)
 }
 
-// leidenIterated runs iterations full Leiden passes, each starting from the
-// previous pass's base partition with its own derived refinement seed
-// (passSeed), and returns the final partition. This is the paper's outer
-// iteration: a converged partition re-enters phase 1 at base granularity, so
-// refinement gets to re-divide the final communities from singletons with
-// fresh randomness, which a single pass never does after aggregation freezes
-// its sub-community granularity. Every pass applies only improving steps from
-// the partition it starts from, so quality is non-decreasing across passes,
-// and the whole run stays a pure function of (g, obj, seed, iterations).
-func leidenIterated(g *csr, obj objective, seed uint64, iterations int, mv localMover) Partition {
-	p := singleton(g.numNodes())
+// leidenIteratedLevels runs iterations full Leiden passes, each starting from
+// the previous pass's base partition with its own derived refinement seed
+// (passSeed), and returns the levels of the final pass, in order; the last is
+// the run's result. This is the paper's outer iteration: a converged partition
+// re-enters phase 1 at base granularity, so refinement gets to re-divide the
+// final communities from singletons with fresh randomness, which a single pass
+// never does after aggregation freezes its sub-community granularity. Every
+// pass applies only improving steps from the partition it starts from, so
+// quality is non-decreasing across passes, and the whole run stays a pure
+// function of (g, obj, seed, iterations). Earlier passes only seed the next
+// one, so their levels are not kept.
+func leidenIteratedLevels(g *csr, obj objective, seed uint64, iterations int, mv localMover) []Partition {
+	levels := []Partition{singleton(g.numNodes())}
 	for pass := range iterations {
-		p = leidenWith(g, obj, passSeed(seed, pass), mv, p)
+		levels = leidenLevelsWith(g, obj, passSeed(seed, pass), mv, levels[len(levels)-1])
 	}
-	return p
+	return levels
 }
 
 // leidenWith runs the three-phase Leiden level loop using mv as the phase-1
@@ -239,9 +241,18 @@ func leidenIterated(g *csr, obj objective, seed uint64, iterations int, mv local
 // synchronous-round mover share one driver; refinement (phase 2), aggregation
 // and non-refined seeding (phase 3), the guards, and termination are identical
 // for both. A pass from singletons is the classic single run; a pass from a
-// previous result is one outer Leiden iteration (leidenIterated). initial is
+// previous result is one outer Leiden iteration (leidenIteratedLevels). initial is
 // not mutated.
 func leidenWith(g *csr, obj objective, seed uint64, mv localMover, initial Partition) Partition {
+	levels := leidenLevelsWith(g, obj, seed, mv, initial)
+	return levels[len(levels)-1]
+}
+
+// leidenLevelsWith is leidenWith reporting every level: the non-refined phase-1
+// partition of each level lifted to the base graph, in order, the last being
+// the pass's result. Because later levels aggregate the refined
+// sub-communities, a level need not nest inside the next.
+func leidenLevelsWith(g *csr, obj objective, seed uint64, mv localMover, initial Partition) []Partition {
 	n := g.numNodes()
 	baseOf := make([]int, n) // base node -> its node in the current working graph
 	for i := range baseOf {
@@ -250,7 +261,7 @@ func leidenWith(g *csr, obj objective, seed uint64, mv localMover, initial Parti
 
 	h := g
 	initP := initial
-	var result Partition
+	var levels []Partition
 	for {
 		// Phase 1: fast local moving from the seeded partition.
 		p := make(Partition, len(initP))
@@ -264,7 +275,7 @@ func leidenWith(g *csr, obj objective, seed uint64, mv localMover, initial Parti
 		for i := range base {
 			base[i] = p[baseOf[i]]
 		}
-		result = canonicalize(base)
+		levels = append(levels, canonicalize(base))
 
 		if numCommunities(p) == h.numNodes() {
 			break // phase-1 merged nothing; the partition is discrete.
@@ -286,5 +297,5 @@ func leidenWith(g *csr, obj objective, seed uint64, mv localMover, initial Parti
 		}
 		h = aggG
 	}
-	return result
+	return levels
 }

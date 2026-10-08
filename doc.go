@@ -47,7 +47,9 @@
 // meso's answers with their own edge sets. An edge whose folded weight is zero
 // is not stored, so every reported edge has positive weight. A Result reports
 // [Result.NumCommunities], each community's [Result.Members], and its
-// [Result.Cohesion], the internal edge density.
+// [Result.Cohesion], the internal edge density. The multilevel run's hierarchy
+// is available through [Result.NumLevels], [Result.Level] and
+// [Result.LevelQuality], finest level first, the last being the result.
 //
 // [Betweenness] computes node betweenness centrality by Brandes' algorithm over
 // unweighted shortest paths, normalized to [0, 1]. [Subgraph] returns the
