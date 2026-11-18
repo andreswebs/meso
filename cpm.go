@@ -26,22 +26,25 @@ var _ QualityFunction = cpm{}
 //
 // where w_ij is the weight between nodes i and j (the self-loop weight on the
 // diagonal), s_i node i's size, and delta is 1 when i and j share a community.
-// This is the literal double-sum definition from the Lean model
-// (verification/lean/Meso/CPM.lean); unlike modularity there is no 2m
-// normalisation, so CPM carries the units of edge weight. Computed in canonical
-// row-major order so repeated evaluation is bit-identical. A zero-node graph has
-// Q = 0.
+// This is the double-sum definition from the Lean model
+// (verification/lean/Meso/CPM.lean), grouped by community:
+//
+//	Q = sum_c (W_c - gamma * S_c^2)
+//
+// with W_c the weight inside community c and S_c its summed node size. Unlike
+// modularity there is no 2m normalisation, so CPM carries the units of edge
+// weight. The communities are added in order of first appearance, so repeated
+// evaluation is bit-identical. A zero-node graph has Q = 0.
 func (m cpm) Quality(g *csr, p Partition) float64 {
-	n := g.numNodes()
+	of, k := communityIndex(p)
+	internal := internalWeights(g, of, k)
+	sTot := make([]float64, k)
+	for i, c := range of {
+		sTot[c] += g.nodeSize(i)
+	}
 	sum := 0.0
-	for i := range n {
-		si := g.nodeSize(i)
-		for j := range n {
-			if p[i] != p[j] {
-				continue
-			}
-			sum += g.weight(i, j) - m.gamma*si*g.nodeSize(j)
-		}
+	for c := range k {
+		sum += internal[c] - m.gamma*sTot[c]*sTot[c]
 	}
 	return sum
 }

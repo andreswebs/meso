@@ -12,8 +12,40 @@ func move(p Partition, v, c int) Partition {
 
 // moveDelta returns the exact change in modularity from reassigning node u to
 // community target under partition p: it equals Quality(move(p, u, target)) -
-// Quality(p) up to floating-point rounding, computed incrementally rather than
-// by two full O(n^2) evaluations.
+// Quality(p) up to floating-point rounding. It is the from-scratch form of
+// [modularityPricer.delta]: it builds a pricer for p, at O(n + m), and prices
+// the one move. The optimizers never call it per candidate; they build one
+// pricer per pass and keep it current.
+func (m modularity) moveDelta(g *csr, p Partition, u, target int) float64 {
+	return m.newPricer(g, p).delta(p, u, target)
+}
+
+// modularityPricer is the [pricer] for modularity: every node's weighted
+// degree, the total weight 2m, and the summed degree of each community.
+type modularityPricer struct {
+	g     *csr
+	gamma float64
+	twoM  float64
+	deg   []float64
+	kTot  *communityMass
+}
+
+func (m modularity) newPricer(g *csr, p Partition) pricer {
+	deg := make([]float64, g.numNodes())
+	twoM := 0.0
+	for i := range deg {
+		deg[i] = g.degree(i)
+		twoM += deg[i]
+	}
+	return &modularityPricer{g: g, gamma: m.gamma, twoM: twoM, deg: deg, kTot: newCommunityMass(p, deg)}
+}
+
+func (pr *modularityPricer) moved(u, src, target int) {
+	pr.kTot.shift(src, target, pr.deg[u])
+}
+
+// delta returns the change in modularity from reassigning node u to community
+// target, in O(deg u).
 //
 // Derivation. With A_ij = w_ij - gamma*k_i*k_j/2m the modularity is
 // Q = (1/2m) * sum_ij A_ij * delta(c_i, c_j). Moving only node u changes just
@@ -32,49 +64,62 @@ func move(p Partition, v, c int) Partition {
 // with W_ut, W_us the edge weight from u into each community (self-loop
 // excluded) and K_t, K_{s\{u}} = K_s - k_u the summed weighted degrees. A no-op
 // move (target == s) and the 2m == 0 graph both return 0.
-func (m modularity) moveDelta(g *csr, p Partition, u, target int) float64 {
+func (pr *modularityPricer) delta(p Partition, u, target int) float64 {
 	src := p[u]
 	if target == src {
 		return 0
 	}
+	toTarget, toSrc := linkWeights(pr.g, p, u, target, src)
+	return pr.price(u, src, target, toSrc, toTarget)
+}
 
-	twoM := g.twoM()
+func (pr *modularityPricer) price(u, src, target int, toSrc, toTarget linkWeight) float64 {
+	if target == src {
+		return 0
+	}
+
+	twoM := pr.twoM
 	if twoM == 0 {
 		return 0
 	}
 
-	ku := g.degree(u)
+	ku := pr.deg[u]
+	kTarget := pr.kTot.of(target)
+	kSrcWithoutU := pr.kTot.of(src) - ku
+	wTarget, wSrc := toTarget.out, toSrc.out
 
-	var kTarget, kSrc float64
-	for v := 0; v < g.numNodes(); v++ {
-		switch p[v] {
-		case target:
-			kTarget += g.degree(v)
-		case src:
-			kSrc += g.degree(v)
-		}
-	}
-	kSrcWithoutU := kSrc - ku
-
-	var wTarget, wSrc float64
-	nb := g.neighbors(u)
-	nw := g.neighborWeights(u)
-	for k, v := range nb {
-		switch p[v] {
-		case target:
-			wTarget += nw[k]
-		case src:
-			wSrc += nw[k]
-		}
-	}
-
-	return (2 / twoM) * ((wTarget - wSrc) - m.gamma*ku*(kTarget-kSrcWithoutU)/twoM)
+	return (2 / twoM) * ((wTarget - wSrc) - pr.gamma*ku*(kTarget-kSrcWithoutU)/twoM)
 }
 
 // moveDelta returns the exact change in CPM from reassigning node u to community
 // target under partition p: it equals Quality(move(p, u, target)) - Quality(p)
-// up to floating-point rounding, computed incrementally rather than by two full
-// O(n^2) evaluations.
+// up to floating-point rounding. It is the from-scratch form of
+// [cpmPricer.delta]: it builds a pricer for p, at O(n), and prices the one
+// move. The optimizers never call it per candidate; they build one pricer per
+// pass and keep it current.
+func (m cpm) moveDelta(g *csr, p Partition, u, target int) float64 {
+	return m.newPricer(g, p).delta(p, u, target)
+}
+
+// cpmPricer is the [pricer] for CPM: the summed node size of each community.
+// Node sizes are stored on the graph, and CPM has no 2m normalisation, so
+// there are no other constants to keep.
+type cpmPricer struct {
+	g     *csr
+	gamma float64
+	sTot  *communityMass
+}
+
+func (m cpm) newPricer(g *csr, p Partition) pricer {
+	return &cpmPricer{g: g, gamma: m.gamma, sTot: newCommunityMass(p, g.nodeSizes)}
+}
+
+func (pr *cpmPricer) moved(u, src, target int) {
+	pr.sTot.shift(src, target, pr.g.nodeSize(u))
+}
+
+// delta returns the change in CPM from reassigning node u to community target,
+// in O(deg u).
 //
 // Derivation. With B_ij = w_ij - gamma*s_i*s_j the CPM is
 // Q = sum_ij B_ij * delta(c_i, c_j) (no 2m normalisation, so B, unlike the
@@ -95,36 +140,24 @@ func (m modularity) moveDelta(g *csr, p Partition, u, target int) float64 {
 // excluded, since it is the dropped diagonal) and S_t, S_{s\{u}} = S_s - s_u the
 // summed node sizes. A no-op move (target == s) returns 0. Unlike modularity
 // there is no 2m factor, so a zero-weight graph needs no special case.
-func (m cpm) moveDelta(g *csr, p Partition, u, target int) float64 {
+func (pr *cpmPricer) delta(p Partition, u, target int) float64 {
 	src := p[u]
 	if target == src {
 		return 0
 	}
+	toTarget, toSrc := linkWeights(pr.g, p, u, target, src)
+	return pr.price(u, src, target, toSrc, toTarget)
+}
 
-	su := g.nodeSize(u)
-
-	var sTarget, sSrc float64
-	for v := 0; v < g.numNodes(); v++ {
-		switch p[v] {
-		case target:
-			sTarget += g.nodeSize(v)
-		case src:
-			sSrc += g.nodeSize(v)
-		}
-	}
-	sSrcWithoutU := sSrc - su
-
-	var wTarget, wSrc float64
-	nb := g.neighbors(u)
-	nw := g.neighborWeights(u)
-	for k, v := range nb {
-		switch p[v] {
-		case target:
-			wTarget += nw[k]
-		case src:
-			wSrc += nw[k]
-		}
+func (pr *cpmPricer) price(u, src, target int, toSrc, toTarget linkWeight) float64 {
+	if target == src {
+		return 0
 	}
 
-	return 2 * ((wTarget - wSrc) - m.gamma*su*(sTarget-sSrcWithoutU))
+	su := pr.g.nodeSize(u)
+	sTarget := pr.sTot.of(target)
+	sSrcWithoutU := pr.sTot.of(src) - su
+	wTarget, wSrc := toTarget.out, toSrc.out
+
+	return 2 * ((wTarget - wSrc) - pr.gamma*su*(sTarget-sSrcWithoutU))
 }

@@ -76,19 +76,19 @@ func isolationBase(p Partition, n int) int {
 }
 
 // bestMovesRange computes the snapshot best move for every node in [lo, hi):
-// it writes only t[lo:hi] and gain[lo:hi] and reads g, obj, and p immutably,
+// it writes only t[lo:hi] and gain[lo:hi] and reads g, pr, and p immutably,
 // with node u's isolation candidate the distinct fresh label base+u. That
 // disjoint write footprint is the unit the Gobra data-race proof specifies.
 // @ requires acc(csrMem(g), _) && acc(partitionMem(p), _)
 // @ requires 0 <= lo && lo <= hi && hi <= len(p)
 // @ requires hi <= len(t) && len(t) == len(gain)
 // @ preserves forall i int :: lo <= i && i < hi ==> acc(&t[i]) && acc(&gain[i])
-func bestMovesRange(g *csr, obj objective, p Partition, t []int, gain []float64, base, lo, hi int) {
+func bestMovesRange(g *csr, pr pricer, p Partition, t []int, gain []float64, base, lo, hi int) {
 	// @ invariant acc(csrMem(g), _) && acc(partitionMem(p), _)
 	// @ invariant lo <= u && u <= hi
 	// @ invariant forall i int :: lo <= i && i < hi ==> acc(&t[i]) && acc(&gain[i])
 	for u := lo; u < hi; u++ {
-		t[u], gain[u] = bestMove(g, obj, p, u, base+u)
+		t[u], gain[u] = bestMove(g, pr, p, u, base+u)
 	}
 }
 
@@ -101,9 +101,9 @@ func bestMovesRange(g *csr, obj objective, p Partition, t []int, gain []float64,
 // @ requires hi <= len(t) && len(t) == len(gain)
 // @ requires forall i int :: lo <= i && i < hi ==> acc(&t[i]) && acc(&gain[i])
 // @ requires wg.UnitDebt(rangeAcc{t, gain, lo, hi})
-func bestMovesWorker(wg *sync.WaitGroup, g *csr, obj objective, p Partition, t []int, gain []float64, base, lo, hi int) {
+func bestMovesWorker(wg *sync.WaitGroup, g *csr, pr pricer, p Partition, t []int, gain []float64, base, lo, hi int) {
 	defer wg.Done()
-	bestMovesRange(g, obj, p, t, gain, base, lo, hi)
+	bestMovesRange(g, pr, p, t, gain, base, lo, hi)
 	// @ fold rangeAcc{t, gain, lo, hi}()
 	// @ wg.PayDebt(rangeAcc{t, gain, lo, hi})
 }
@@ -115,16 +115,18 @@ func bestMovesWorker(wg *sync.WaitGroup, g *csr, obj objective, p Partition, t [
 //
 // The work is split into contiguous node-index ranges, one per worker goroutine;
 // each goroutine writes only its own slots of t and gain and reads only the
-// shared, immutable g, obj, and p, so there is no data race and no lock. Because
-// every node's decision depends solely on the snapshot - never on another node's
-// same-round result - the output is byte-identical whatever the worker count,
-// which is the code-level half of applyRound_perm's core-count independence.
+// shared g, pr, and p, none of which is written during the fan-out (the pricer
+// is updated only by moved, which no worker calls), so there is no data race
+// and no lock. Because every node's decision depends solely on the snapshot -
+// never on another node's same-round result - the output is byte-identical
+// whatever the worker count, which is the code-level half of applyRound_perm's
+// core-count independence.
 // @ requires acc(csrMem(g), _) && acc(partitionMem(p), _)
 // @ requires len(p) == g.numNodes()
 // @ ensures acc(csrMem(g), _) && acc(partitionMem(p), _)
 // @ ensures len(t) == g.numNodes() && len(gain) == len(t)
 // @ ensures forall i int :: 0 <= i && i < len(t) ==> acc(&t[i]) && acc(&gain[i])
-func parallelBestMoves(g *csr, obj objective, p Partition, workers int) (t []int, gain []float64) {
+func parallelBestMoves(g *csr, pr pricer, p Partition, workers int) (t []int, gain []float64) {
 	n := g.numNodes()
 	t = make([]int, n)
 	gain = make([]float64, n)
@@ -135,7 +137,7 @@ func parallelBestMoves(g *csr, obj objective, p Partition, workers int) (t []int
 
 	workers = normalizeWorkers(workers, n)
 	if workers == 1 {
-		bestMovesRange(g, obj, p, t, gain, base, 0, n)
+		bestMovesRange(g, pr, p, t, gain, base, 0, n)
 		return t, gain
 	}
 
@@ -170,7 +172,7 @@ func parallelBestMoves(g *csr, obj objective, p Partition, workers int) (t []int
 		// @ los = los ++ seq[int]{lo}
 		// @ his = his ++ seq[int]{hi}
 		// @ tokens = tokens ++ seq[pred()]{rangeAcc{t, gain, lo, hi}}
-		go bestMovesWorker(&wg, g, obj, p, t, gain, base, lo, hi)
+		go bestMovesWorker(&wg, g, pr, p, t, gain, base, lo, hi)
 	}
 	// @ wg.SetWaitMode(1/2, 1/2)
 	wg.Wait( /*@ 1/1, tokens @*/ )
@@ -180,78 +182,66 @@ func parallelBestMoves(g *csr, obj objective, p Partition, workers int) (t []int
 
 // parallelRound applies one synchronous local-move round against the frozen
 // snapshot p and returns the next partition together with whether it changed.
-// Every node's target is decided from p alone (parallelBestMoves), the moved set
-// is every node whose gain clears moveImproveEps, and the moves are combined by
-// applyRound - a function of the snapshot and the moved set, independent of the
-// number of workers.
+// Every node's target is decided from p alone (parallelBestMoves); the proposed
+// moves are the nodes whose snapshot gain clears moveImproveEps. The moves that
+// are kept are combined by applyRound - a function of the snapshot and the kept
+// set, independent of the number of workers.
 //
 // Confluence (applyRound_perm) gives determinism but not monotonicity: because
 // each node prices its move against the snapshot, two independent snapshot moves
-// interact through the null-model degree sums, so applying the whole moved set
-// at once can fail to improve - or, on a bipartite trap like an even cycle,
-// swap partners and oscillate. The design-4.5 mitigation chosen here is
-// "strictly-positive-gain acceptance with deterministic conflict resolution":
+// interact through the null-model degree sums and through each other's link
+// weights, so applying every proposed move at once can fail to improve - or, on
+// a bipartite trap like an even cycle, swap partners and oscillate. The
+// design-4.5 mitigation chosen here is "strictly-positive-gain acceptance with
+// deterministic conflict resolution":
 //
-//   - Compute the round's exact realized delta by summing the incremental
-//     move-deltas in ascending node order against a running copy (a telescoping
-//     sum that equals Quality(applyRound(...)) - Quality(p), evaluated in a fixed
-//     order so it is byte-identical across worker counts).
-//   - If it strictly improves, accept the whole round.
-//   - Otherwise the batch conflicted, so resolve deterministically by applying
-//     only the single highest-gain move (smallest node index breaking ties).
-//     A lone move's realized delta is exactly its snapshot gain, which cleared
-//     moveImproveEps, so this branch strictly improves too.
+//   - Walk the proposed moves in ascending node order against a running copy of
+//     the partition, re-pricing each one against that copy.
+//   - Keep a move only when its re-priced delta still clears moveImproveEps;
+//     a move that an earlier kept move has made worthless is dropped, and its
+//     node is reconsidered next round.
 //
-// Either branch raises the objective by more than moveImproveEps, so - exactly
-// as in the serial loop's termination argument (no_infinite_acceptedMove_run) -
-// only finitely many rounds can change the partition. Every input to the accept/
-// resolve decision is a pure function of the snapshot, so the returned partition
-// is independent of the schedule and the worker count.
+// Every kept move strictly raises the objective of the running copy, so the
+// round never lowers quality. The first proposed move is priced against a copy
+// still equal to the snapshot, so its delta is its snapshot gain and it is
+// always kept: a round with any proposal raises the objective by more than
+// moveImproveEps. So - exactly as in the serial loop's termination argument
+// (no_infinite_acceptedMove_run) - only finitely many rounds can change the
+// partition. Every input to the decision is a pure function of the snapshot,
+// and the walk is serial in a fixed order, so the returned partition is
+// independent of the schedule and the worker count.
+//
+// Re-pricing costs only the proposing nodes' degrees, so a round stays linear
+// in the graph however many proposals conflict.
 //
 // It is deliberately outside the Gobra proof scope (R2) and marked trusted:
-// its body uses copy on a defined slice type and float compound assignment,
-// which the Gobra frontend rejects even for unverified members.
+// its body uses copy on a defined slice type, which the Gobra frontend rejects
+// even for unverified members.
 // @ trusted
 func parallelRound(g *csr, obj objective, p Partition, workers int) (Partition, bool) {
-	t, gain := parallelBestMoves(g, obj, p, workers)
+	pr := obj.newPricer(g, p)
+	t, gain := parallelBestMoves(g, pr, p, workers)
 
-	moved := make([]bool, len(p))
-	anyMoved := false
-	for u := range p {
-		if gain[u] > moveImproveEps && t[u] != p[u] {
-			moved[u] = true
-			anyMoved = true
-		}
-	}
-	if !anyMoved {
-		return p, false
-	}
-
-	// Exact realized delta of the full round, summed in ascending node order.
 	q := make(Partition, len(p))
 	copy(q, p)
-	var realized float64
+	kept := make([]bool, len(p))
+	anyKept := false
 	for u := range p {
-		if moved[u] {
-			realized += obj.moveDelta(g, q, u, t[u])
-			q[u] = t[u]
+		if gain[u] <= moveImproveEps || t[u] == p[u] {
+			continue
 		}
-	}
-	if realized > moveImproveEps {
-		return applyRound(p, t, moved), true
-	}
-
-	// Conflict resolution: the batch did not improve, so take only the single
-	// best move (smallest index on a tie), which is exactly monotone.
-	best := -1
-	for u := range p {
-		if moved[u] && (best < 0 || gain[u] > gain[best]) {
-			best = u
+		if pr.delta(q, u, t[u]) <= moveImproveEps {
+			continue
 		}
+		pr.moved(u, q[u], t[u])
+		q[u] = t[u]
+		kept[u] = true
+		anyKept = true
 	}
-	only := make([]bool, len(p))
-	only[best] = true
-	return applyRound(p, t, only), true
+	if !anyKept {
+		return p, false
+	}
+	return applyRound(p, t, kept), true
 }
 
 // parallelLocalMoveToStable runs synchronous parallel rounds (parallelRound)

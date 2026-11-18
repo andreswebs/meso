@@ -32,29 +32,7 @@ import "sort"
 // internal edge again lands 2*weight on the self-loop and the aggregate comes out
 // symmetric, matching the undirected aggregate.
 func aggregate(g *csr, p Partition) (*csr, []int) {
-	n := g.numNodes()
-
-	// Canonical relabel: distinct community labels sorted ascending -> [0, k).
-	present := make(map[int]struct{}, n)
-	for _, c := range p {
-		present[c] = struct{}{}
-	}
-	labels := make([]int, 0, len(present))
-	for c := range present {
-		labels = append(labels, c)
-	}
-	sort.Ints(labels)
-	dense := make(map[int]int, len(labels))
-	for d, c := range labels {
-		dense[c] = d
-	}
-	k := len(labels)
-
-	superOf := make([]int, n)
-	for i, c := range p {
-		superOf[i] = dense[c]
-	}
-
+	superOf, k := denseLabels(p)
 	if g.directed {
 		return aggregateDirected(g, superOf, k), superOf
 	}
@@ -67,104 +45,122 @@ func aggregate(g *csr, p Partition) (*csr, []int) {
 // A A) and a cross edge accumulates blockWeight from each side into the symmetric
 // pair (a, b) and (b, a).
 func aggregateUndirected(g *csr, superOf []int, k int) *csr {
-	n := g.numNodes()
-	nodeSizes := make([]float64, k)
-	selfLoops := make([]float64, k)
-	block := make([]map[int]float64, k)
-	for a := range block {
-		block[a] = make(map[int]float64)
-	}
-
-	for i := range n {
-		a := superOf[i]
-		nodeSizes[a] += g.nodeSize(i)
-		selfLoops[a] += g.selfLoops[i]
-		nb := g.neighbors(i)
-		nw := g.neighborWeights(i)
-		for x, j := range nb {
-			b := superOf[j]
-			if a == b {
-				selfLoops[a] += nw[x]
-			} else {
-				block[a][b] += nw[x]
-			}
-		}
-	}
-
-	offsets, neighbors, weights := flattenBlock(block, k)
-	return newCSR(offsets, neighbors, weights, selfLoops, nodeSizes)
+	out, selfLoops, nodeSizes := foldOutArcs(g, superOf, k)
+	return newCSR(out.offsets, out.neighbors, out.weights, selfLoops, nodeSizes)
 }
 
 // aggregateDirected folds a directed graph into its k-node aggregate, keeping
-// out- and in-arcs separable. The single pass runs over each node's out-arcs
-// (each directed arc is stored once, from its source): an internal arc (a == b)
-// lands once on the self-loop, and a cross arc a -> b accumulates into both the
-// aggregate out-block (a, b) and the in-block (b, a). Node sizes and members'
-// own self-loops fold in as in the undirected case.
+// out- and in-arcs separable. The fold runs over each node's out-arcs (each
+// directed arc is stored once, from its source): an internal arc (a == b)
+// lands once on the self-loop, and a cross arc a -> b accumulates into the
+// aggregate out-arc (a, b). The aggregate in-arc (b, a) carries the same sum of
+// the same arcs, so the in-adjacency is the transpose of the out-adjacency.
+// Node sizes and members' own self-loops fold in as in the undirected case.
 func aggregateDirected(g *csr, superOf []int, k int) *csr {
-	n := g.numNodes()
-	nodeSizes := make([]float64, k)
-	selfLoops := make([]float64, k)
-	outBlock := make([]map[int]float64, k)
-	inBlock := make([]map[int]float64, k)
-	for a := range k {
-		outBlock[a] = make(map[int]float64)
-		inBlock[a] = make(map[int]float64)
-	}
-
-	for i := range n {
-		a := superOf[i]
-		nodeSizes[a] += g.nodeSize(i)
-		selfLoops[a] += g.selfLoops[i]
-		nb := g.neighbors(i)
-		nw := g.neighborWeights(i)
-		for x, j := range nb {
-			b := superOf[j]
-			if a == b {
-				selfLoops[a] += nw[x]
-			} else {
-				outBlock[a][b] += nw[x]
-				inBlock[b][a] += nw[x]
-			}
-		}
-	}
-
-	outOff, outNb, outW := flattenBlock(outBlock, k)
-	inOff, inNb, inW := flattenBlock(inBlock, k)
+	out, selfLoops, nodeSizes := foldOutArcs(g, superOf, k)
 	return &csr{
 		n:         k,
 		directed:  true,
-		out:       adjacency{offsets: outOff, neighbors: outNb, weights: outW},
-		in:        adjacency{offsets: inOff, neighbors: inNb, weights: inW},
+		out:       out,
+		in:        transpose(out, k),
 		selfLoops: selfLoops,
 		nodeSizes: nodeSizes,
 	}
 }
 
-// flattenBlock turns per-super-node accumulated cross weights into CSR arrays,
-// listing each super-node's targets in ascending index order so the layout is
-// canonical (independent of map iteration order).
-func flattenBlock(block []map[int]float64, k int) (offsets, neighbors []int, weights []float64) {
-	offsets = make([]int, k+1)
-	for a := range k {
-		offsets[a+1] = offsets[a] + len(block[a])
+// foldOutArcs sums g's out-arcs by super-node into the k-node aggregate's out
+// adjacency, self-loops and node sizes. Each super-node's targets are listed in
+// ascending index order, so the layout is canonical.
+//
+// The super-nodes are folded one at a time, each over its members in ascending
+// node order, so every sum receives its terms in the order a single ascending
+// pass over all nodes would deliver them. One dense row of cross weights is
+// reused across super-nodes and cleared through the list of targets it touched.
+func foldOutArcs(g *csr, superOf []int, k int) (out adjacency, selfLoops, nodeSizes []float64) {
+	n := g.numNodes()
+	nodeSizes = make([]float64, k)
+	selfLoops = make([]float64, k)
+
+	// Members of each super-node, ascending: members[start[a]:start[a+1]].
+	start := make([]int, k+1)
+	for _, a := range superOf {
+		start[a+1]++
 	}
-	neighbors = make([]int, offsets[k])
-	weights = make([]float64, offsets[k])
-	idx := 0
 	for a := range k {
-		dsts := make([]int, 0, len(block[a]))
-		for b := range block[a] {
-			dsts = append(dsts, b)
+		start[a+1] += start[a]
+	}
+	members := make([]int, n)
+	next := make([]int, k)
+	copy(next, start[:k])
+	for i, a := range superOf {
+		members[next[a]] = i
+		next[a]++
+	}
+
+	row := make([]float64, k)
+	inRow := make([]bool, k)
+	var touched []int
+
+	out.offsets = make([]int, k+1)
+	for a := range k {
+		touched = touched[:0]
+		for _, i := range members[start[a]:start[a+1]] {
+			nodeSizes[a] += g.nodeSize(i)
+			selfLoops[a] += g.selfLoops[i]
+			nw := g.neighborWeights(i)
+			for x, j := range g.neighbors(i) {
+				b := superOf[j]
+				if a == b {
+					selfLoops[a] += nw[x]
+					continue
+				}
+				if !inRow[b] {
+					inRow[b] = true
+					touched = append(touched, b)
+				}
+				row[b] += nw[x]
+			}
 		}
-		sort.Ints(dsts)
-		for _, b := range dsts {
-			neighbors[idx] = b
-			weights[idx] = block[a][b]
-			idx++
+		sort.Ints(touched)
+		for _, b := range touched {
+			out.neighbors = append(out.neighbors, b)
+			out.weights = append(out.weights, row[b])
+			row[b] = 0
+			inRow[b] = false
+		}
+		out.offsets[a+1] = len(out.neighbors)
+	}
+	if out.neighbors == nil {
+		out.neighbors = []int{}
+		out.weights = []float64{}
+	}
+	return out, selfLoops, nodeSizes
+}
+
+// transpose returns the adjacency holding arc (b, a, w) for every arc (a, b, w)
+// of adj over k nodes. Sources are visited in ascending order, so each node's
+// list comes out sorted by neighbour.
+func transpose(adj adjacency, k int) adjacency {
+	offsets := make([]int, k+1)
+	for _, b := range adj.neighbors {
+		offsets[b+1]++
+	}
+	for b := range k {
+		offsets[b+1] += offsets[b]
+	}
+	neighbors := make([]int, len(adj.neighbors))
+	weights := make([]float64, len(adj.weights))
+	next := make([]int, k)
+	copy(next, offsets[:k])
+	for a := range k {
+		for x := adj.offsets[a]; x < adj.offsets[a+1]; x++ {
+			b := adj.neighbors[x]
+			neighbors[next[b]] = a
+			weights[next[b]] = adj.weights[x]
+			next[b]++
 		}
 	}
-	return offsets, neighbors, weights
+	return adjacency{offsets: offsets, neighbors: neighbors, weights: weights}
 }
 
 // expand lifts an aggregate partition back to the base graph: base node i takes

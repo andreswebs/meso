@@ -160,6 +160,15 @@ that can move simultaneously without conflict, or strictly-positive-gain accepta
 with deterministic conflict resolution. The deep test suite (section 6) is what
 guards this.
 
+The implementation takes the second mitigation. A round's proposed moves are
+walked in ascending node order against a running copy of the partition, each one
+re-priced against that copy, and a move is kept only while it still strictly
+improves the objective; a move an earlier kept move has made worthless is dropped
+and its node is reconsidered in the next round. Every kept move raises the
+objective and the first proposal is always kept, so rounds are monotone and the
+phase terminates. Re-pricing costs only the proposing nodes' degrees, so a round
+stays linear in the graph however many proposals conflict.
+
 Priorities: correctness and determinism first, then speed. Target: competitive
 with the Java reference and far faster than a naive implementation. We do not claim
 to beat the C++ `libleidenalg`.

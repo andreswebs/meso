@@ -34,12 +34,21 @@ type csr struct {
 // Mirror of partition.go's Partition.
 type Partition []int
 
+// Mirror of pricer.go's pricer, narrowed to the methods parallel.go
+// mentions (delta and moved, both called from the unverified
+// parallelRound). The verified fork-join only passes a pricer through to
+// the opaque bestMove.
+type pricer interface {
+	delta(p Partition, u, target int) float64
+	moved(u, src, target int)
+}
+
 // Mirror of louvain.go's objective, narrowed to the single method
-// parallel.go mentions (moveDelta, called from the unverified
+// parallel.go mentions (newPricer, called from the unverified
 // parallelRound). The real interface also embeds QualityFunction; only
 // type-level agreement on what parallel.go touches matters for encoding.
 type objective interface {
-	moveDelta(g *csr, p Partition, u, target int) float64
+	newPricer(g *csr, p Partition) pricer
 }
 
 // Mirror of louvain.go's moveImproveEps, declared without its value: the
@@ -126,12 +135,13 @@ decreases
 pure func (g *csr) numNodes() (res int)
 
 // The trusted footprint contract of bestMove (louvain.go), the opaque leaf
-// of the fork-join: it reads the graph and the snapshot partition
-// immutably and writes nothing shared. No ensures beyond the defaults: the
+// of the fork-join: it reads the graph, the snapshot partition, and the
+// pricer immutably (it calls only the pricer's read-only price method,
+// never moved) and writes nothing shared. No ensures beyond the defaults: the
 // race-freedom proof needs only the footprint, never the values. This is
 // the single trusted assumption on the hot path; it is registered in the
 // README's trusted assumption register.
 requires acc(csrMem(g), _)
 requires acc(partitionMem(p), _)
 requires 0 <= u && u < len(p)
-func bestMove(g *csr, obj objective, p Partition, u, isolateLabel int) (target int, score float64)
+func bestMove(g *csr, pr pricer, p Partition, u, isolateLabel int) (target int, score float64)

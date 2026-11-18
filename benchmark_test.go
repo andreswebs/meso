@@ -1,6 +1,7 @@
 package meso
 
 import (
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -15,9 +16,12 @@ type benchGraph struct {
 
 // benchGraphs returns the small-to-large fixtures the benchmark suite runs
 // Leiden and Louvain over (design section 8, step 12): the three canonical
-// corpus graphs for the small tier, and deterministic planted-partition graphs
-// for the medium and large tiers. Graph construction is outside the timed loop,
-// so only the detection call is measured.
+// corpus graphs for the small tier, deterministic planted-partition graphs for
+// the medium tier, and for the large tier a planted graph of four communities
+// of 4000 nodes (large communities) and sparse hub-and-components graphs (many
+// small ones). The two sparse sizes differ by a factor of two so the pair shows
+// how the run time grows with the graph. Graph construction is outside the timed loop, so only
+// the detection call is measured.
 func benchGraphs(tb testing.TB) []benchGraph {
 	tb.Helper()
 	return []benchGraph{
@@ -26,6 +30,9 @@ func benchGraphs(tb testing.TB) []benchGraph {
 		{"lesmis", loadGMLGraph(tb, "datasets/lesmis/lesmis.gml")},
 		{"planted-300", plantedGraph(300, 8, 6, 1, 1)},
 		{"planted-800", plantedGraph(800, 20, 6, 1, 2)},
+		{"planted-16k-4", plantedGraph(16000, 4, 6, 1, 1)},
+		{"sparse-10k", sparseGraph(10000, 3, false, false)},
+		{"sparse-20k", sparseGraph(20000, 3, false, false)},
 	}
 }
 
@@ -116,6 +123,30 @@ func BenchmarkLouvain(b *testing.B) {
 	}
 }
 
+// BenchmarkParallel measures Leiden and Louvain with the synchronous-round
+// parallel local-move phase on the larger sparse graph, where nearly every node
+// proposes a move that conflicts with a neighbour's in the first rounds.
+func BenchmarkParallel(b *testing.B) {
+	g := sparseGraph(20000, 3, false, false)
+	for _, alg := range []struct {
+		name string
+		run  func(*Graph, ...Option) (*Result, error)
+	}{
+		{"leiden", Leiden},
+		{"louvain", Louvain},
+	} {
+		b.Run(alg.name+"/sparse-20k", func(b *testing.B) {
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				if _, err := alg.run(g, WithParallelism(4)); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
+}
+
 // loadLFREdgeList builds the undirected graph of a committed LFR edge list
 // (datasets/lfr: "u v" lines, "#" comments), canonically indexed. The richer
 // LFR loader lives in the external test package and is not reachable here.
@@ -185,4 +216,60 @@ func BenchmarkSubgraph(b *testing.B) {
 			}
 		}
 	})
+}
+
+// sparseGraph builds a deterministic sparse graph of n nodes shaped like a
+// dependency estate: many small tree-like components (about one edge per node,
+// plus a few extra intra-component edges) and a handful of hubs wired to random
+// nodes across the graph, for roughly 1.1 edges per node overall. Weights are 1
+// when fractional is false and non-integer otherwise, so the same shape
+// exercises both exact and rounded community totals. The structure is a pure
+// function of the arguments via the package PRNG.
+func sparseGraph(n int, seed uint64, directed, fractional bool) *Graph {
+	r := newPRNG(seed)
+	b := NewBuilder()
+	if directed {
+		b = NewDirectedBuilder()
+	}
+	b.Canonical()
+	key := func(u int) string { return fmt.Sprintf("n%07d", u) }
+	for u := range n {
+		b.AddNodeWeight(key(u), 1.0)
+	}
+	weight := func() float64 {
+		if fractional {
+			return 0.25 + r.float64()
+		}
+		return 1.0
+	}
+	pick := func(lo, hi int) int { return lo + int(r.next()%uint64(hi-lo)) }
+
+	for lo := 0; lo < n; {
+		hi := min(lo+pick(5, 40), n)
+		for u := lo + 1; u < hi; u++ {
+			b.AddEdge(key(u), key(pick(lo, u)), weight())
+			if r.next()%20 == 0 && u-lo > 2 {
+				if v := pick(lo, u); v != u {
+					b.AddEdge(key(v), key(u), weight())
+				}
+			}
+		}
+		lo = hi
+	}
+
+	hubs := 5
+	for h := range hubs {
+		hub := (h*n)/hubs + n/(2*hubs)
+		for range n / 100 {
+			if v := pick(0, n); v != hub {
+				b.AddEdge(key(hub), key(v), weight())
+			}
+		}
+	}
+
+	g, err := b.Build()
+	if err != nil {
+		panic("meso: sparseGraph build failed: " + err.Error())
+	}
+	return g
 }

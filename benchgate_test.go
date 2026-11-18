@@ -83,9 +83,26 @@ func parseBenchFields(fields []string) (benchSample, bool, error) {
 // baseline*(1+fraction) is flagged. ns/op gets headroom for machine variance;
 // allocs/op is deterministic per graph, so its fraction is normally 0 (no
 // hot-path allocation growth allowed, per design section 8).
+//
+// A benchmark that starts goroutines is the exception: its allocation count
+// moves by a few from run to run with scheduling and with when the collector
+// empties a sync.Pool. Those benchmarks get concurrentAllocsFraction when it is
+// the larger of the two, enough to absorb that jitter and nothing more.
 type benchThresholds struct {
-	nsFraction     float64
-	allocsFraction float64
+	nsFraction               float64
+	allocsFraction           float64
+	concurrentAllocsFraction float64
+}
+
+// concurrentBenchPrefix names the benchmarks that start goroutines.
+const concurrentBenchPrefix = "BenchmarkParallel/"
+
+// allocsFor returns the allocs/op fraction that applies to the named benchmark.
+func (thr benchThresholds) allocsFor(name string) float64 {
+	if strings.HasPrefix(name, concurrentBenchPrefix) {
+		return max(thr.allocsFraction, thr.concurrentAllocsFraction)
+	}
+	return thr.allocsFraction
 }
 
 // regression is one flagged metric: the benchmark, which metric regressed, and
@@ -115,7 +132,7 @@ func detectRegressions(base, cur map[string][]benchSample, thr benchThresholds) 
 		if exceeds(bm.nsPerOp, cm.nsPerOp, thr.nsFraction) {
 			regs = append(regs, regression{name, "ns/op", bm.nsPerOp, cm.nsPerOp})
 		}
-		if exceeds(bm.allocsPerOp, cm.allocsPerOp, thr.allocsFraction) {
+		if exceeds(bm.allocsPerOp, cm.allocsPerOp, thr.allocsFor(name)) {
 			regs = append(regs, regression{name, "allocs/op", bm.allocsPerOp, cm.allocsPerOp})
 		}
 	}
@@ -233,19 +250,26 @@ func TestDetectRegressions(t *testing.T) {
 		"BenchmarkLeiden/small":  {{nsPerOp: 100, allocsPerOp: 5}},
 		"BenchmarkLouvain/small": {{nsPerOp: 200, allocsPerOp: 10}},
 		"BenchmarkLeiden/big":    {{nsPerOp: 1000, allocsPerOp: 20}},
+
+		"BenchmarkParallel/leiden/a":  {{nsPerOp: 100, allocsPerOp: 5000}},
+		"BenchmarkParallel/louvain/a": {{nsPerOp: 100, allocsPerOp: 5000}},
 	}
 	cur := map[string][]benchSample{
 		"BenchmarkLeiden/small":  {{nsPerOp: 160, allocsPerOp: 5}},   // 60% slower: ns regression
 		"BenchmarkLouvain/small": {{nsPerOp: 205, allocsPerOp: 12}},  // 2.5% slower ok, +2 allocs: allocs regression
 		"BenchmarkLeiden/big":    {{nsPerOp: 1100, allocsPerOp: 20}}, // 10% slower: within tolerance
+
+		"BenchmarkParallel/leiden/a":  {{nsPerOp: 100, allocsPerOp: 5020}}, // goroutine jitter: within tolerance
+		"BenchmarkParallel/louvain/a": {{nsPerOp: 100, allocsPerOp: 5200}}, // +4% allocs: allocs regression
 	}
-	thr := benchThresholds{nsFraction: 0.20, allocsFraction: 0}
+	thr := benchThresholds{nsFraction: 0.20, allocsFraction: 0, concurrentAllocsFraction: 0.02}
 
 	regs := detectRegressions(base, cur, thr)
 
 	want := []string{
 		"BenchmarkLeiden/small ns/op",
 		"BenchmarkLouvain/small allocs/op",
+		"BenchmarkParallel/louvain/a allocs/op",
 	}
 	var got []string
 	for _, r := range regs {
@@ -306,6 +330,8 @@ func TestBenchmarkRegressionGate(t *testing.T) {
 	thr := benchThresholds{
 		nsFraction:     envFraction("MESO_BENCH_NS_FRACTION", 1.0),
 		allocsFraction: envFraction("MESO_BENCH_ALLOCS_FRACTION", 0.0),
+
+		concurrentAllocsFraction: 0.02,
 	}
 	for _, r := range detectRegressions(base, cur, thr) {
 		if r.metric == "missing" {
@@ -314,7 +340,7 @@ func TestBenchmarkRegressionGate(t *testing.T) {
 		}
 		t.Errorf("regression: %s %s %.0f -> %.0f (+%.1f%%, allowed +%.1f%%)",
 			r.name, r.metric, r.baseline, r.current,
-			100*(r.current/r.baseline-1), 100*thresholdFor(r.metric, thr))
+			100*(r.current/r.baseline-1), 100*thresholdFor(r.name, r.metric, thr))
 	}
 }
 
@@ -353,9 +379,9 @@ func envFraction(key string, def float64) float64 {
 
 // thresholdFor returns the fraction that applies to a metric, for the failure
 // message only.
-func thresholdFor(metric string, thr benchThresholds) float64 {
+func thresholdFor(name, metric string, thr benchThresholds) float64 {
 	if metric == "allocs/op" {
-		return thr.allocsFraction
+		return thr.allocsFor(name)
 	}
 	return thr.nsFraction
 }

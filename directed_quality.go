@@ -34,25 +34,30 @@ var _ QualityFunction = directedModularity{}
 // where w_ij is the weight of the arc i -> j (the self-loop weight on the
 // diagonal), k_i^out and k_j^in the weighted out- and in-degrees, m the total
 // arc weight (sum_i k_i^out, which the CSR's [csr.twoM] returns for a directed
-// graph), and delta is 1 when i and j share a community. Computed in canonical
-// row-major order so repeated evaluation is bit-identical. A graph with m == 0
-// has Q = 0.
+// graph), and delta is 1 when i and j share a community. Grouped by community:
+//
+//	Q = (1 / m) * sum_c (W_c - gamma * K_c^out * K_c^in / m)
+//
+// with W_c the arc weight inside community c and K_c^out, K_c^in its summed
+// out- and in-degrees. The communities are added in order of first appearance,
+// so repeated evaluation is bit-identical. A graph with m == 0 has Q = 0.
 func (m directedModularity) Quality(g *csr, p Partition) float64 {
 	total := g.twoM()
 	if total == 0 {
 		return 0
 	}
 
-	n := g.numNodes()
+	of, k := communityIndex(p)
+	internal := internalWeights(g, of, k)
+	kOut := make([]float64, k)
+	kIn := make([]float64, k)
+	for i, c := range of {
+		kOut[c] += g.outDegree(i)
+		kIn[c] += g.inDegree(i)
+	}
 	sum := 0.0
-	for i := range n {
-		kOut := g.outDegree(i)
-		for j := range n {
-			if p[i] != p[j] {
-				continue
-			}
-			sum += g.weight(i, j) - m.gamma*kOut*g.inDegree(j)/total
-		}
+	for c := range k {
+		sum += internal[c] - m.gamma*kOut[c]*kIn[c]/total
 	}
 	return sum / total
 }

@@ -1,6 +1,9 @@
 package meso
 
-import "sort"
+import (
+	"cmp"
+	"slices"
+)
 
 // mergeCommunities merges community b into community a: every node labelled b is
 // relabelled a, every other node is left untouched, and a fresh Partition is
@@ -203,45 +206,36 @@ type refineCand struct {
 func refineIntents(g *csr, obj objective, outer Partition, seed uint64) []int {
 	n := g.numNodes()
 	base := singleton(n)
+	pr := obj.newPricer(g, base)
 
 	intents := make([]int, n)
+	var cands []refineCand
 	for v := range n {
 		intents[v] = -1
+		cands = cands[:0]
 
-		var cands []refineCand
-		seen := make(map[int]struct{})
-		consider := func(u int, w float64) {
-			if _, ok := seen[u]; ok {
-				return
+		consider := func(nb []int, nw []float64) {
+			for k, u := range nb {
+				if nw[k] <= 0 || outer[u] != outer[v] {
+					continue
+				}
+				if gain := pr.delta(base, v, u); gain > moveImproveEps {
+					cands = append(cands, refineCand{u: u, gain: gain})
+				}
 			}
-			if w <= 0 || outer[u] != outer[v] {
-				return
-			}
-			gain := obj.moveDelta(g, base, v, u)
-			if gain <= moveImproveEps {
-				return
-			}
-			seen[u] = struct{}{}
-			cands = append(cands, refineCand{u: u, gain: gain})
 		}
-
-		nb := g.neighbors(v)
-		nw := g.neighborWeights(v)
-		for k, u := range nb {
-			consider(u, nw[k])
-		}
+		consider(g.neighbors(v), g.neighborWeights(v))
 		if g.directed {
-			inNb := g.inNeighbors(v)
-			inW := g.inNeighborWeights(v)
-			for k, u := range inNb {
-				consider(u, inW[k])
-			}
+			consider(g.inNeighbors(v), g.inNeighborWeights(v))
 		}
 
 		if len(cands) == 0 {
 			continue
 		}
-		sort.Slice(cands, func(i, j int) bool { return cands[i].u < cands[j].u })
+		slices.SortFunc(cands, func(a, b refineCand) int { return cmp.Compare(a.u, b.u) })
+		// A node reached by both an out-arc and an in-arc is listed twice with
+		// the same gain; keep one.
+		cands = slices.CompactFunc(cands, func(a, b refineCand) bool { return a.u == b.u })
 		intents[v] = weightedChoice(cands, newPRNG(nodeSeed(seed, v)))
 	}
 	return intents

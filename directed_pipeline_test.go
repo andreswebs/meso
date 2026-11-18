@@ -57,7 +57,7 @@ func TestBestMove_DirectedMatchesBruteForce(t *testing.T) {
 		}
 		for u := 0; u < g.numNodes(); u++ {
 			wantD := bruteBestDelta(g, obj, p, u, isolate)
-			gotT, gotD := bestMove(g, obj, p, u, isolate)
+			gotT, gotD := bestMove(g, obj.newPricer(g, p), p, u, isolate)
 			if math.Abs(gotD-wantD) > moveTol {
 				t.Fatalf("seed %d node %d: bestMove delta %v, exhaustive optimum %v",
 					seed, u, gotD, wantD)
@@ -99,8 +99,8 @@ func TestBestMove_SymmetricDirectedMatchesUndirected(t *testing.T) {
 		uObj := modularity{gamma: 1.0}
 		dObj := directedModularity{gamma: 1.0}
 		for v := 0; v < u.numNodes(); v++ {
-			wantT, wantD := bestMove(u, uObj, p, v, isolate)
-			gotT, gotD := bestMove(dir, dObj, p, v, isolate)
+			wantT, wantD := bestMove(u, uObj.newPricer(u, p), p, v, isolate)
+			gotT, gotD := bestMove(dir, dObj.newPricer(dir, p), p, v, isolate)
 			if gotT != wantT || math.Abs(gotD-wantD) > moveTol {
 				t.Fatalf("seed %d node %d: directed bestMove = (%d, %v), undirected = (%d, %v)",
 					seed, v, gotT, gotD, wantT, wantD)

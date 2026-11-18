@@ -410,7 +410,7 @@ func isLocalMoveStable(g *csr, obj objective, p Partition) bool {
 		}
 	}
 	for u := 0; u < g.numNodes(); u++ {
-		if _, delta := bestMove(g, obj, p, u, fresh); delta > louvainTol {
+		if _, delta := bestMove(g, obj.newPricer(g, p), p, u, fresh); delta > louvainTol {
 			return false
 		}
 	}

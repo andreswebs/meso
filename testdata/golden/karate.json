@@ -5,7 +5,7 @@
   "gamma": 1,
   "seed": 0,
   "communities": 4,
-  "modularity": "0.4188034188034182",
+  "modularity": "0.41880341880341876",
   "partition": [
     {
       "node": "1",

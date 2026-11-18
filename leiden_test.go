@@ -166,7 +166,7 @@ func TestLeidenLocalMoveQueue_ReachesStable(t *testing.T) {
 			t.Fatalf("seed %d %T: sweep after localMoveQueue still moved a node", seed, obj)
 		}
 		for u := 0; u < g.numNodes(); u++ {
-			if _, delta := bestMove(g, obj, p, u, fresh); delta > louvainTol {
+			if _, delta := bestMove(g, obj.newPricer(g, p), p, u, fresh); delta > louvainTol {
 				t.Fatalf("seed %d %T: node %d improves queue-stable partition by %v", seed, obj, u, delta)
 			}
 		}

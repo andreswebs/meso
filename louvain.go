@@ -1,11 +1,19 @@
 package meso
 
-import "sort"
+import (
+	"cmp"
+	"slices"
+	"sort"
+	"sync"
+)
 
-// objective is the internal optimisation interface Louvain (and, later, Leiden)
-// runs against: a [QualityFunction] that also exposes the incremental move-delta
-// of reassigning one node to a candidate community. modularity and cpm are its
-// instances. The public constructors [Modularity] and [CPM] hand callers the
+// objective is the internal optimisation interface Louvain and Leiden run
+// against: a [QualityFunction] that also prices the reassignment of one node to
+// a candidate community. moveDelta prices a single move from scratch, at a cost
+// linear in the graph; newPricer returns the [pricer] the optimizers use
+// instead, which keeps the per-community totals a move-delta needs so each
+// candidate costs only the moved node's degree. modularity, cpm and
+// directedModularity are its instances. The public constructors [Modularity] and [CPM] hand callers the
 // QualityFunction view; the optimizers narrow it to objective internally, so the
 // move loop is written once against both. Unifying the two deltas behind one
 // interface is deferred from the delta tickets to here on purpose (see
@@ -13,6 +21,7 @@ import "sort"
 type objective interface {
 	QualityFunction
 	moveDelta(g *csr, p Partition, u, target int) float64
+	newPricer(g *csr, p Partition) pricer
 }
 
 var (
@@ -47,11 +56,60 @@ func singleton(k int) Partition {
 // partition (every node its own community) - the fixed point at which the
 // multilevel loop stops.
 func numCommunities(p Partition) int {
-	seen := make(map[int]struct{}, len(p))
+	_, k := denseLabels(p)
+	return k
+}
+
+// denseLabels maps every node's label to its rank among the distinct labels of
+// p, taken in ascending order, and returns those ranks with the number of
+// distinct labels. Ranking by ascending label makes the result independent of
+// node order.
+//
+// Labels are usually small non-negative integers (at most n starting labels
+// plus the isolation labels a serial pass mints), so the ranks come from a
+// table indexed by label. A partition whose labels range too widely for such a
+// table - the parallel round hands every node its own isolation label past the
+// largest one in use - is ranked by sorting its distinct labels instead.
+func denseLabels(p Partition) (dense []int, k int) {
+	dense = make([]int, len(p))
+	lo, hi := 0, -1
 	for _, c := range p {
-		seen[c] = struct{}{}
+		lo, hi = min(lo, c), max(hi, c)
 	}
-	return len(seen)
+
+	if lo >= 0 && hi < 4*len(p)+16 {
+		rank := make([]int, hi+1)
+		for _, c := range p {
+			rank[c] = 1
+		}
+		for c, present := range rank {
+			if present != 0 {
+				rank[c] = k
+				k++
+			}
+		}
+		for i, c := range p {
+			dense[i] = rank[c]
+		}
+		return dense, k
+	}
+
+	rank := make(map[int]int, len(p))
+	for _, c := range p {
+		rank[c] = 0
+	}
+	labels := make([]int, 0, len(rank))
+	for c := range rank {
+		labels = append(labels, c)
+	}
+	sort.Ints(labels)
+	for d, c := range labels {
+		rank[c] = d
+	}
+	for i, c := range p {
+		dense[i] = rank[c]
+	}
+	return dense, len(labels)
 }
 
 // canonicalize relabels p to dense community indices in [0, numCommunities(p)),
@@ -61,23 +119,8 @@ func numCommunities(p Partition) int {
 // even when p carried the out-of-range isolation labels the local-move phase
 // introduces.
 func canonicalize(p Partition) Partition {
-	dense := make(map[int]int, len(p))
-	for _, c := range p {
-		dense[c] = 0
-	}
-	labels := make([]int, 0, len(dense))
-	for c := range dense {
-		labels = append(labels, c)
-	}
-	sort.Ints(labels)
-	for d, c := range labels {
-		dense[c] = d
-	}
-	out := make(Partition, len(p))
-	for i, c := range p {
-		out[i] = dense[c]
-	}
-	return out
+	dense, _ := denseLabels(p)
+	return dense
 }
 
 // bestMove returns the community that most improves the objective for node u
@@ -101,36 +144,91 @@ func canonicalize(p Partition) Partition {
 // reached only through an in-arc must still be considered. On an undirected graph
 // the in-adjacency mirrors the out-adjacency, so the in pass adds nothing new and
 // the behaviour is unchanged.
-func bestMove(g *csr, obj objective, p Partition, u, isolateLabel int) (int, float64) {
+func bestMove(g *csr, pr pricer, p Partition, u, isolateLabel int) (int, float64) {
+	s := moveScratchPool.Get().(*moveScratch)
+	defer moveScratchPool.Put(s)
+	return s.bestMove(g, pr, p, u, isolateLabel)
+}
+
+// moveScratchPool lends working storage to the package-level bestMove, which
+// the parallel round calls from many goroutines with no scratch of its own to
+// pass. A scratch is held by one goroutine from Get to Put, so workers never
+// share one.
+var moveScratchPool = sync.Pool{New: func() any { return new(moveScratch) }}
+
+// communityLink is the weight between the node being priced and one community.
+type communityLink struct {
+	label int
+	w     linkWeight
+}
+
+// moveScratch is the working storage of bestMove, kept between calls so a
+// serial local-move pass prices every node without allocating. It must not be
+// shared between goroutines; the zero value is ready to use.
+type moveScratch struct {
+	links []communityLink
+}
+
+// bestMove is the package-level bestMove using s for working storage.
+//
+// It gathers u's link weight to every neighbouring community in one pass over
+// u's adjacency, then prices each candidate from those sums (pricer.price), so
+// a node costs O(d log d) for degree d however many communities its neighbours
+// span. Each arc is recorded with its community label and the records are
+// stably sorted by label, so the arcs into one community are summed in
+// adjacency order - the order a per-candidate rescan would use - and the
+// candidates come out in ascending label order.
+func (s *moveScratch) bestMove(g *csr, pr pricer, p Partition, u, isolateLabel int) (int, float64) {
 	src := p[u]
 
-	cands := make([]int, 0, len(g.neighbors(u))+1)
-	seen := make(map[int]struct{})
-	addCand := func(c int) {
-		if c == src {
-			return
-		}
-		if _, ok := seen[c]; ok {
-			return
-		}
-		seen[c] = struct{}{}
-		cands = append(cands, c)
-	}
-	for _, v := range g.neighbors(u) {
-		addCand(p[v])
+	links := s.links[:0]
+	nw := g.neighborWeights(u)
+	for k, v := range g.neighbors(u) {
+		links = append(links, communityLink{label: p[v], w: linkWeight{out: nw[k]}})
 	}
 	if g.directed {
-		for _, v := range g.inNeighbors(u) {
-			addCand(p[v])
+		inW := g.inNeighborWeights(u)
+		for k, v := range g.inNeighbors(u) {
+			links = append(links, communityLink{label: p[v], w: linkWeight{in: inW[k]}})
 		}
 	}
-	addCand(isolateLabel)
-	sort.Ints(cands)
+	// Isolation is a candidate with no link weight; listing it here slots it
+	// into the ascending label order alongside the neighbour communities.
+	links = append(links, communityLink{label: isolateLabel})
+	slices.SortStableFunc(links, func(a, b communityLink) int { return cmp.Compare(a.label, b.label) })
+
+	// Fold each run of equal labels into its first record.
+	k := 0
+	for _, l := range links[1:] {
+		if l.label == links[k].label {
+			links[k].w.out += l.w.out
+			links[k].w.in += l.w.in
+			continue
+		}
+		k++
+		links[k] = l
+	}
+	links = links[:k+1]
+	s.links = links
+
+	var toSrc linkWeight
+	for i := range links {
+		if !g.directed {
+			// The in-adjacency of an undirected graph is its out-adjacency.
+			links[i].w.in = links[i].w.out
+		}
+		if links[i].label == src {
+			toSrc = links[i].w
+		}
+	}
 
 	bestTarget, bestDelta := src, 0.0
-	for _, c := range cands {
-		if d := obj.moveDelta(g, p, u, c); d > bestDelta {
-			bestDelta, bestTarget = d, c
+	for _, l := range links {
+		if l.label == src {
+			continue
+		}
+		if d := pr.price(u, src, l.label, toSrc, l.w); d > bestDelta {
+			bestDelta, bestTarget = d, l.label
 		}
 	}
 	return bestTarget, bestDelta
@@ -148,10 +246,13 @@ func bestMove(g *csr, obj objective, p Partition, u, isolateLabel int) (int, flo
 // node is isolated.
 func localMoveSweep(g *csr, obj objective, p Partition, fresh *int) bool {
 	moved := false
+	pr := obj.newPricer(g, p)
+	var scratch moveScratch
 	for u := 0; u < g.numNodes(); u++ {
-		target, delta := bestMove(g, obj, p, u, *fresh)
-		if delta > moveImproveEps && target != p[u] {
+		target, delta := scratch.bestMove(g, pr, p, u, *fresh)
+		if src := p[u]; delta > moveImproveEps && target != src {
 			p[u] = target
+			pr.moved(u, src, target)
 			if target == *fresh {
 				*fresh++
 			}

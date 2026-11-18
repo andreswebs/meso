@@ -7,18 +7,18 @@ package meso
 // and sets the mark, pop clears it, so a node can be re-enqueued once it has been
 // processed but never while it is still pending.
 //
-// items grows append-only and head walks forward; a node is live while
-// head <= its slot < len(items). Total pushes are bounded (see localMoveQueue),
-// so the backing slice does not grow without bound over a run.
+// Because no node waits twice, at most n nodes wait at once, so items is a ring
+// of n slots: head is the front node's slot and size the number waiting.
 type nodeQueue struct {
 	items  []int
 	head   int
+	size   int
 	queued []bool
 }
 
 // newNodeQueue returns an empty queue sized for n nodes (indices 0..n-1).
 func newNodeQueue(n int) *nodeQueue {
-	return &nodeQueue{queued: make([]bool, n)}
+	return &nodeQueue{items: make([]int, n), queued: make([]bool, n)}
 }
 
 // push enqueues v unless it is already waiting, reporting whether it was added.
@@ -29,7 +29,12 @@ func (q *nodeQueue) push(v int) bool {
 		return false
 	}
 	q.queued[v] = true
-	q.items = append(q.items, v)
+	tail := q.head + q.size
+	if tail >= len(q.items) {
+		tail -= len(q.items)
+	}
+	q.items[tail] = v
+	q.size++
 	return true
 }
 
@@ -38,13 +43,17 @@ func (q *nodeQueue) push(v int) bool {
 func (q *nodeQueue) pop() int {
 	v := q.items[q.head]
 	q.head++
+	if q.head == len(q.items) {
+		q.head = 0
+	}
+	q.size--
 	q.queued[v] = false
 	return v
 }
 
 // empty reports whether every enqueued node has been popped.
 func (q *nodeQueue) empty() bool {
-	return q.head >= len(q.items)
+	return q.size == 0
 }
 
 // localMoveDrain runs one queue-driven pass of the fast local-move phase: every
@@ -71,17 +80,21 @@ func localMoveDrain(g *csr, obj objective, p Partition, fresh *int) (moved bool,
 	for u := 0; u < g.numNodes(); u++ {
 		q.push(u)
 	}
+	pr := obj.newPricer(g, p)
+	var scratch moveScratch
 
 	for !q.empty() {
 		u := q.pop()
 		pops++
 
-		target, delta := bestMove(g, obj, p, u, *fresh)
-		if delta <= moveImproveEps || target == p[u] {
+		target, delta := scratch.bestMove(g, pr, p, u, *fresh)
+		src := p[u]
+		if delta <= moveImproveEps || target == src {
 			continue
 		}
 
 		p[u] = target
+		pr.moved(u, src, target)
 		if target == *fresh {
 			*fresh++
 		}

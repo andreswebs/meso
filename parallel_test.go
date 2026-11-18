@@ -49,9 +49,9 @@ func TestParallel_RoundCoreCountInvariant(t *testing.T) {
 	obj := modularity{gamma: 1.0}
 	p := singleton(g.numNodes())
 
-	baseT, baseGain := parallelBestMoves(g, obj, p, 1)
+	baseT, baseGain := parallelBestMoves(g, obj.newPricer(g, p), p, 1)
 	for _, w := range parallelWorkerCounts {
-		gotT, gotGain := parallelBestMoves(g, obj, p, w)
+		gotT, gotGain := parallelBestMoves(g, obj.newPricer(g, p), p, w)
 		if !reflect.DeepEqual(gotT, baseT) {
 			t.Fatalf("targets with %d workers = %v, want %v", w, gotT, baseT)
 		}
@@ -299,5 +299,31 @@ func TestParallel_IsolationBase(t *testing.T) {
 		if got := isolationBase(tc.p, tc.n); got != tc.want {
 			t.Errorf("isolationBase(%v, %d) = %d, want %d", tc.p, tc.n, got, tc.want)
 		}
+	}
+}
+
+// TestParallel_MutualProposalsResolveInOneRound checks the conflict resolution
+// of parallelRound on its simplest conflict: two adjacent singletons each
+// propose joining the other. Applying both would swap them and gain nothing, so
+// the round must keep the first move, drop the second, and leave a partition
+// the next round has nothing to add to.
+func TestParallel_MutualProposalsResolveInOneRound(t *testing.T) {
+	g := newCSR([]int{0, 1, 2}, []int{1, 0}, []float64{1, 1}, nil, nil)
+	obj := modularity{gamma: 1.0}
+
+	p := singleton(2)
+	before := obj.Quality(g, p)
+	next, changed := parallelRound(g, obj, p, 2)
+	if !changed {
+		t.Fatal("round changed nothing; want the pair merged")
+	}
+	if next[0] != next[1] {
+		t.Fatalf("round left the pair apart: %v", next)
+	}
+	if after := obj.Quality(g, next); after <= before {
+		t.Fatalf("round did not raise quality: %.15g -> %.15g", before, after)
+	}
+	if _, changed := parallelRound(g, obj, next, 2); changed {
+		t.Fatal("second round changed a partition the first had settled")
 	}
 }

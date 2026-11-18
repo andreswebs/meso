@@ -2,8 +2,51 @@ package meso
 
 // moveDelta returns the exact change in directed modularity from reassigning
 // node u to community target under partition p: it equals
-// Quality(move(p, u, target)) - Quality(p) up to floating-point rounding,
-// computed incrementally rather than by two full O(n^2) evaluations.
+// Quality(move(p, u, target)) - Quality(p) up to floating-point rounding. It is
+// the from-scratch form of [directedPricer.delta]: it builds a pricer for p, at
+// O(n + m), and prices the one move. The optimizers never call it per
+// candidate; they build one pricer per pass and keep it current.
+func (m directedModularity) moveDelta(g *csr, p Partition, u, target int) float64 {
+	return m.newPricer(g, p).delta(p, u, target)
+}
+
+// directedPricer is the [pricer] for directed modularity: every node's weighted
+// out- and in-degree, the total arc weight, and the summed out- and in-degree
+// of each community.
+type directedPricer struct {
+	g       *csr
+	gamma   float64
+	total   float64
+	degOut  []float64
+	degIn   []float64
+	koutTot *communityMass
+	kinTot  *communityMass
+}
+
+func (m directedModularity) newPricer(g *csr, p Partition) pricer {
+	n := g.numNodes()
+	degOut := make([]float64, n)
+	degIn := make([]float64, n)
+	total := 0.0
+	for i := range n {
+		degOut[i] = g.outDegree(i)
+		degIn[i] = g.inDegree(i)
+		total += degOut[i]
+	}
+	return &directedPricer{
+		g: g, gamma: m.gamma, total: total, degOut: degOut, degIn: degIn,
+		koutTot: newCommunityMass(p, degOut),
+		kinTot:  newCommunityMass(p, degIn),
+	}
+}
+
+func (pr *directedPricer) moved(u, src, target int) {
+	pr.koutTot.shift(src, target, pr.degOut[u])
+	pr.kinTot.shift(src, target, pr.degIn[u])
+}
+
+// delta returns the change in directed modularity from reassigning node u to
+// community target, in O(deg u) over u's out- and in-arcs.
 //
 // Derivation. With A_ij = w_ij - gamma*k_i^out*k_j^in/T the directed modularity
 // is Q = (1/T) * sum_ij A_ij * delta(c_i, c_j), where T is the total arc weight.
@@ -23,60 +66,34 @@ package meso
 // graph, where in equals out at every node, both direction terms coincide and
 // this reduces exactly to [modularity.moveDelta]. A no-op move (target == s) and
 // the T == 0 graph both return 0.
-func (m directedModularity) moveDelta(g *csr, p Partition, u, target int) float64 {
+func (pr *directedPricer) delta(p Partition, u, target int) float64 {
 	src := p[u]
 	if target == src {
 		return 0
 	}
+	toTarget, toSrc := linkWeights(pr.g, p, u, target, src)
+	return pr.price(u, src, target, toSrc, toTarget)
+}
 
-	total := g.twoM()
+func (pr *directedPricer) price(u, src, target int, toSrc, toTarget linkWeight) float64 {
+	if target == src {
+		return 0
+	}
+
+	total := pr.total
 	if total == 0 {
 		return 0
 	}
 
-	koutU := g.outDegree(u)
-	kinU := g.inDegree(u)
+	koutU := pr.degOut[u]
+	kinU := pr.degIn[u]
+	koutTarget := pr.koutTot.of(target)
+	kinTarget := pr.kinTot.of(target)
+	koutSrcWithoutU := pr.koutTot.of(src) - koutU
+	kinSrcWithoutU := pr.kinTot.of(src) - kinU
 
-	var koutTarget, kinTarget, koutSrc, kinSrc float64
-	for v := 0; v < g.numNodes(); v++ {
-		switch p[v] {
-		case target:
-			koutTarget += g.outDegree(v)
-			kinTarget += g.inDegree(v)
-		case src:
-			koutSrc += g.outDegree(v)
-			kinSrc += g.inDegree(v)
-		}
-	}
-	koutSrcWithoutU := koutSrc - koutU
-	kinSrcWithoutU := kinSrc - kinU
-
-	var woutTarget, woutSrc float64
-	outNb := g.neighbors(u)
-	outW := g.neighborWeights(u)
-	for k, v := range outNb {
-		switch p[v] {
-		case target:
-			woutTarget += outW[k]
-		case src:
-			woutSrc += outW[k]
-		}
-	}
-
-	var winTarget, winSrc float64
-	inNb := g.inNeighbors(u)
-	inW := g.inNeighborWeights(u)
-	for k, v := range inNb {
-		switch p[v] {
-		case target:
-			winTarget += inW[k]
-		case src:
-			winSrc += inW[k]
-		}
-	}
-
-	edge := (woutTarget - woutSrc) + (winTarget - winSrc)
-	null := m.gamma*koutU*(kinTarget-kinSrcWithoutU)/total +
-		m.gamma*kinU*(koutTarget-koutSrcWithoutU)/total
+	edge := (toTarget.out - toSrc.out) + (toTarget.in - toSrc.in)
+	null := pr.gamma*koutU*(kinTarget-kinSrcWithoutU)/total +
+		pr.gamma*kinU*(koutTarget-koutSrcWithoutU)/total
 	return (edge - null) / total
 }

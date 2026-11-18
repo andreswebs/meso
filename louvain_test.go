@@ -392,7 +392,7 @@ func TestConverge_StableIsMoveFixedPoint(t *testing.T) {
 			}
 		}
 		for u := 0; u < g.numNodes(); u++ {
-			target, delta := bestMove(g, obj, p, u, fresh)
+			target, delta := bestMove(g, obj.newPricer(g, p), p, u, fresh)
 			if delta > louvainTol {
 				t.Fatalf("seed %d: node %d best move (-> %d) improves stable partition by %v", seed, u, target, delta)
 			}
